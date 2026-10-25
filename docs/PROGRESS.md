@@ -21,3 +21,7 @@ Review fixes: case/date normalization for duplicate claims; spreadsheet formula 
 Independent reviewer: review_integration (read-only).
 Startup support: launch.py binds 127.0.0.1 and opens /suite/; start_workspace.bat creates local venv with pinned dependencies. Existing start_tool.bat retained for compatibility. Linux startup helper added.
 Cloud config draft saved install_script/start_skill and targeted domains finance.rajasthan.gov.in and cdn.sheetjs.com. Requires user review/save and publication; draft save does not change runtime access. GitHub API read denied in current environment, while native Git reads work. No token requested.
+Additional review fixes: zero-net arrear still checks gross/deduction arithmetic; BEGIN IMMEDIATE serializes overlapping finalization. Both reproduced RED, then GREEN including eight concurrent finalization requests. Targeted suite: 24 passed.
+Last full regression run (before final two review tests): 80 passed, 14 skipped, 13 failed. All 13 failures are tests/test_expected_totals.py for inherited V1 deduction totals in 1.pdf–13.pdf; V2 and new suite gates pass. Original parser.py remains byte-identical to archive. Failures are retained and not hidden.
+Actual HTTP checks: /suite/, /suite/static/suite.js, /analyzer, /api/v3/health_check all return 200 on loopback; node --check suite.js passes.
+Development checkpoint pushed to GitHub branch feat/unified-ifms at 6bd0f09. GitHub API unavailable so no pull request created; branch push succeeded via existing Git authentication.
