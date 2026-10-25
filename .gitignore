@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.db
+*.db-*
+uploads/
+exports/
+backups/
+.superpowers/
+test_fixtures/

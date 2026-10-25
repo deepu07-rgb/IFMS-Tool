@@ -1,0 +1,100 @@
+{
+  "1.pdf": {
+    "group": "Khandafalsa",
+    "gross": 2707921,
+    "deduction": 572559,
+    "net": 2135362,
+    "employees": 36
+  },
+  "2.pdf": {
+    "group": "CP PL FIRST",
+    "gross": 14126848,
+    "deduction": 3179147,
+    "net": 10947701,
+    "employees": 146
+  },
+  "3.pdf": {
+    "group": "SI/ASI GENERAL SIX PAY",
+    "gross": 9872137,
+    "deduction": 2087152,
+    "net": 7784985,
+    "employees": 91
+  },
+  "4.pdf": {
+    "group": "IVth Class/NEW RT",
+    "gross": 978460,
+    "deduction": 164631,
+    "net": 813829,
+    "employees": 13
+  },
+  "5.pdf": {
+    "group": "AP-Police Line",
+    "gross": 13113814,
+    "deduction": 3220274,
+    "net": 9893540,
+    "employees": 126
+  },
+  "6.pdf": {
+    "group": "Wireless-I",
+    "gross": 1606244,
+    "deduction": 227892,
+    "net": 1378352,
+    "employees": 21
+  },
+  "7.pdf": {
+    "group": "PS CYBER",
+    "gross": 804874,
+    "deduction": 164367,
+    "net": 640507,
+    "employees": 10
+  },
+  "8.pdf": {
+    "group": "TP CPF BILL",
+    "gross": 9691260,
+    "deduction": 1487086,
+    "net": 8204174,
+    "employees": 166
+  },
+  "9.pdf": {
+    "group": "OFFICE STAFF",
+    "gross": 15590025,
+    "deduction": 3553376,
+    "net": 12036649,
+    "employees": 181
+  },
+  "10.pdf": {
+    "group": "COMMISSIONERATE JDR",
+    "gross": 872640,
+    "deduction": 226031,
+    "net": 646609,
+    "employees": 5
+  },
+  "11.pdf": {
+    "group": "TRAFFIC SI ASI",
+    "gross": 3154780,
+    "deduction": 731356,
+    "net": 2423424,
+    "employees": 30
+  },
+  "12.pdf": {
+    "group": "PCR",
+    "gross": 7212565,
+    "deduction": 1548497,
+    "net": 5664068,
+    "employees": 89
+  },
+  "13.pdf": {
+    "group": "Udaimandir",
+    "gross": 5503975,
+    "deduction": 1011118,
+    "net": 4492857,
+    "employees": 70
+  },
+  "14.pdf": {
+    "group": "NEW RT 2025",
+    "gross": 1921256,
+    "deduction": 252510,
+    "net": 1668746,
+    "employees": 134
+  }
+}
