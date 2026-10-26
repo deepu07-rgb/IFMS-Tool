@@ -31,3 +31,21 @@ The same job ran the actual Windows executable in a fresh data directory and pas
 GitHub artifact digest: `sha256:42e14625ae2097bc961134c98ce075e35bd64d5bc5f3ef5378e1bc68026c82c3`.
 
 Final Linux package: 316,217,299 bytes with system Tesseract; actual packaged smoke passed. Additional Chromium checks passed reviewed monthly allocation entry, mobile/desktop viewport containment, paid leave revision from ₹1,000 to ₹1,200 with ₹200 remaining, and offline loading of the retained inner/group interfaces.
+
+
+## Increment and scanned-table iteration — 26 October 2026
+
+Source `3dc5987` passed Windows build #7:
+https://github.com/deepu07-rgb/IFMS-Tool/actions/runs/40368154281#artifacts
+
+The mandatory Windows gates passed the active suite (including local Tesseract tests with its PATH configured), installed footprint strictly below 500,000,000 bytes, and actual frozen HTTP/calculation/increment/PDF/Excel/database/OCR smoke checks. Artifact **IFMSWorkspace-Windows** is 153 MB compressed; exact installed bytes are included in its size-report.json. Artifact digest: `sha256:7952f0c41382c373d09cd0f7ff44804a2d13d53a6c2dbe252ffab10aaf9e916a`.
+
+Final Linux active gate: **162 passed, 14 skipped**. Full suite: **163 passed, 14 skipped, 13 inherited inactive V1 expected-total failures**. Latest Linux frozen package: 316,241,031 bytes; actual packaged smoke includes the reviewed increment result3093 and passed.
+
+Independent review found two Important full-period rate-validation gaps. Both were reproduced and fixed; regressions cover bounded interior overrides and midmonth rates introduced after drafting. Additional tests cover approved increment-effective dates, export basis metadata, prior arrear blocking, absent drawn heads, configured-rate overrides and zero difference for already-updated August salary. Browser validation exercised the actual form, saved component drafts and PDF/Excel pack.
+
+An anonymized source-reviewed July increment gives Basic1600+DA960+HRA320+HDA213=3093, agreeing with the handwritten reference. The app uses dated DA60%, Y-category HRA20% and the explicitly confirmed exact HDA fraction(Basic+DA)/12. The separate HDA policy order was not supplied; this is source-reconciled input, not a newly certified official rule.
+
+OCR is still review-only. In the private increment scan, standard OCR parsed0 payment rows; column fallback now identifies9 candidate bills. A manually aligned audit of46 positive allowance cells found20 exact,5 incorrect and21 missing. Handwritten due-drawn parsing still yields0 usable rows. This establishes an extraction improvement and a correct reviewed-input calculation, **not an unattended OCR accuracy pass**. A secondary numeric-only experiment did not resolve all discrepancies and was not deployed.
+
+Private comparison reports, OCR audit and employee documents are retained outside the repository. No customer scan was included in the application package or committed with this iteration.
