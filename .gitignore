@@ -8,3 +8,8 @@ exports/
 backups/
 .superpowers/
 test_fixtures/
+workspace.lock
+pending-restore.zip
+restore-staging.sqlite
+build/
+dist/

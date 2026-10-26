@@ -5,6 +5,9 @@ v7.1: Fixed multi-page schedule parsing - continuation pages without headers, bl
 """
 import os, json, sqlite3, io, re, unicodedata, tempfile, sys, platform
 from datetime import datetime
+if __name__ == '__main__':
+    from runtime import startup
+    workspace_lock = startup()
 import concurrent.futures
 import threading
 from datetime import datetime
@@ -832,12 +835,15 @@ from ifms_engine.master_employee_register_v3 import (
 )
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['TRUSTED_HOSTS'] = ['localhost', '127.0.0.1', '[::1]']
+from runtime import data_directory
+DATA_DIR = str(data_directory())
+app.config['UPLOAD_FOLDER'] = os.path.join(DATA_DIR, 'uploads')
 app.config['OFFICIAL_SCHEDULE_UPLOAD_FOLDER'] = os.path.join(app.config['UPLOAD_FOLDER'], 'official_schedules')
-app.config['EXPORT_FOLDER'] = os.path.join(os.path.dirname(__file__), 'exports')
-app.config['BACKUP_FOLDER'] = os.path.join(os.path.dirname(__file__), 'backups')
+app.config['EXPORT_FOLDER'] = os.path.join(DATA_DIR, 'exports')
+app.config['BACKUP_FOLDER'] = os.path.join(DATA_DIR, 'backups')
 app.config['USE_V2_PARSER'] = True
-app.config['DATABASE'] = os.path.join(os.path.dirname(__file__), 'ifms_data.db')
+app.config['DATABASE'] = os.path.join(DATA_DIR, 'ifms_data.db')
 app.config['JSON_AS_ASCII'] = False
 app.json.ensure_ascii = False
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

@@ -1,11 +1,615 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IFMS Workspace</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f3f6f6;color:#20383d;font:15px system-ui}aside{position:fixed;inset:0 auto 0 0;width:245px;background:#123d42;color:white;padding:24px 14px;overflow:auto}h1{font-size:22px}aside small{color:#b2d6d6}nav{margin-top:30px}nav button{display:block;width:100%;text-align:left;border:0;background:none;color:#d8e9e9;padding:13px;border-radius:8px;cursor:pointer}nav button.active,nav button:hover{background:#28616a;color:white}main{margin-left:245px;padding:28px;max-width:1700px}section{display:none}section.active{display:block}.card{background:white;border:1px solid #d9e3e4;border-radius:12px;padding:22px;margin:16px 0}label{display:inline-flex;flex-direction:column;gap:6px;margin:8px 14px 8px 0}input,select,textarea,button{font:inherit}input,select,textarea{padding:10px;border:1px solid #b9cbce;border-radius:6px}button.action,a.action{display:inline-block;background:#17626c;color:white;border:0;padding:11px 16px;border-radius:6px;cursor:pointer;margin:5px;text-decoration:none}textarea{width:100%;min-height:160px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:9px;border-bottom:1px solid #dce6e7;text-align:left}.scroll{overflow:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:450px;overflow:auto}iframe{width:100%;height:85vh;border:0;background:white}#message{position:sticky;top:0;background:#fff3cb;padding:12px;display:none;z-index:3}.muted{color:#61787e}.grid{display:grid;grid-template-columns:2fr 1fr;gap:20px}@media(max-width:800px){aside{position:static;width:100%;padding:12px}nav{display:flex;overflow:auto;margin:0}nav button{min-width:140px}main{margin:0;padding:14px}.grid{display:block}}
-</style></head><body><aside><h1>IFMS Workspace</h1><small>Salary records & arrear preparation</small><nav id="navigation"></nav></aside><main><div id="message" role="status"></div>
-<section id="dashboard" class="active"><h1>Office workspace</h1><p class="muted">Import once. Review the source. Prepare a traceable statement.</p><div class="card"><h2>Start a task</h2><button class="action" onclick="openModule('imports')">Import an outer sheet / GA 55</button><button class="action" onclick="openModule('arrears')">Prepare due–drawn</button><button class="action" onclick="openLegacy('upload')">Import inner sheets</button></div><div class="card"><h2>Saved work</h2><div id="summary"></div></div><div class="card"><b>Current calculation scope</b><p>Percentage-of-basic allowances, calendar-day proration and explicit due/drawn rates. Review rates and entitlement against applicable orders. Scanned/handwritten input is retained for review; automated recognition is still being integrated.</p></div></section>
-<section id="employees"><h1>Employee & Group Management</h1><div class="card"><form id="employeeForm"><label>Employee code<input name="employee_code" required></label><label>Name<input name="name" required></label><label>Group<input name="group"></label><button class="action">Save employee</button></form><div id="employeesTable"></div></div><div class="card"><button class="action" onclick="openLegacy('masterregister')">Open existing master register</button><a class="action" href="/groups" target="_blank" rel="noopener">Open group spreadsheet analyzer</a><p class="muted">Spreadsheet analyzer is retained for compatibility; its edited rows are not yet automatically synchronized with the shared employee library.</p></div></section>
-<section id="imports"><h1>Outer Sheet & GA 55 imports</h1><div class="card"><form id="importForm"><label>Document type<select name="kind"><option value="outer">Outer sheet</option><option value="ga55">GA 55</option><option value="due_drawn">Existing due–drawn statement</option></select></label><label>PDF<input name="file" type="file" accept="application/pdf" required></label><button class="action">Extract for review</button></form><p class="muted">Original files are retained. Extracted text is evidence, not confirmed payment history.</p></div><div id="importsList"></div></section>
-<section id="arrears"><h1>Arrear & Due–Drawn Maker</h1><div class="grid"><div><div class="card"><form id="claimForm"><label>Employee code<input name="employee_code" required list="employeeOptions"></label><datalist id="employeeOptions"></datalist><label>Allowance<input name="allowance" list="allowances" value="DA" required></label><datalist id="allowances"><option>DA</option><option>HRA</option><option>HDA</option><option>CCA</option></datalist><label>From<input name="start" type="date" value="2025-01-01" required></label><label>Through (inclusive)<input name="end" type="date" value="2025-03-31" required></label><p>Add a row at each pay or rate change. Drawn rates must be confirmed from payment records. All figures use percentage of basic.</p><div class="scroll"><table><thead><tr><th>From</th><th>Through</th><th>Basic</th><th>Due %</th><th>Drawn %</th><th>Prior settlement</th><th></th></tr></thead><tbody id="segments"></tbody></table></div><button type="button" class="action" onclick="addSegment()">Add pay / rate period</button><button class="action">Calculate & save draft</button></form></div><div id="calculation"></div></div><div class="card"><h2>Applicable rates</h2><p class="muted">Library entries are manually supplied. Select and verify the correct effective dates; rates are not silently applied.</p><div id="rateReference"></div></div></div></section>
-<section id="rates"><h1>Rates & Allowance Library</h1><div class="card"><form id="rateForm"><label>Allowance<input name="allowance" required value="DA"></label><label>Effective from<input name="effective_from" type="date" required></label><label>Rate (%)<input name="rate" type="number" step="0.0001" required></label><label>Order date<input name="order_date" type="date"></label><label>Order / source reference<input name="reference" required></label><button class="action">Save manual rate</button></form><p class="muted">Official Rajasthan historical schedules have not yet been verified or bundled.</p><div id="ratesTable"></div></div></section>
-<section id="reports"><h1>Saved statements</h1><div id="claimsList"></div><div class="card"><button class="action" onclick="openLegacy('backup')">Backup & Restore</button><button class="action" onclick="openLegacy('exportcenter')">Existing Export Centre</button></div></section>
-<section id="legacy"><h1 id="legacyTitle">Inner Sheet Analyzer</h1><iframe id="legacyFrame" title="Existing analyzer"></iframe></section>
-</main><script src="{{ url_for('suite.static',filename='suite.js') }}"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>IFMS Workspace</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f3f6f6;
+        color: #20383d;
+        font: 15px system-ui;
+      }
+      aside {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: 245px;
+        background: #123d42;
+        color: white;
+        padding: 24px 14px;
+        overflow: auto;
+      }
+      h1 {
+        font-size: 22px;
+      }
+      aside small {
+        color: #b2d6d6;
+      }
+      nav {
+        margin-top: 30px;
+      }
+      nav button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: none;
+        color: #d8e9e9;
+        padding: 13px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      nav button.active,
+      nav button:hover {
+        background: #28616a;
+        color: white;
+      }
+      main {
+        margin-left: 245px;
+        padding: 28px;
+        max-width: 1700px;
+      }
+      section {
+        display: none;
+      }
+      section.active {
+        display: block;
+      }
+      .card {
+        background: white;
+        border: 1px solid #d9e3e4;
+        border-radius: 12px;
+        padding: 22px;
+        margin: 16px 0;
+      }
+      label {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 8px 14px 8px 0;
+      }
+      input,
+      select,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      select,
+      textarea {
+        padding: 10px;
+        border: 1px solid #b9cbce;
+        border-radius: 6px;
+      }
+      button.action,
+      a.action {
+        display: inline-block;
+        background: #17626c;
+        color: white;
+        border: 0;
+        padding: 11px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin: 5px;
+        text-decoration: none;
+      }
+      textarea {
+        width: 100%;
+        min-height: 160px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+      }
+      td,
+      th {
+        padding: 9px;
+        border-bottom: 1px solid #dce6e7;
+        text-align: left;
+      }
+      .scroll {
+        overflow: auto;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 450px;
+        overflow: auto;
+      }
+      iframe {
+        width: 100%;
+        height: 85vh;
+        border: 0;
+        background: white;
+      }
+      #message {
+        position: sticky;
+        top: 0;
+        background: #fff3cb;
+        padding: 12px;
+        display: none;
+        z-index: 3;
+      }
+      .muted {
+        color: #61787e;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 800px) {
+        aside {
+          position: static;
+          width: 100%;
+          padding: 12px;
+        }
+        nav {
+          display: flex;
+          overflow: auto;
+          margin: 0;
+        }
+        nav button {
+          min-width: 140px;
+        }
+        main {
+          margin: 0;
+          padding: 14px;
+        }
+        .grid {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <h1>IFMS Workspace</h1>
+      <small>Salary records & arrear preparation</small>
+      <nav id="navigation"></nav>
+    </aside>
+    <main>
+      <div id="message" role="status"></div>
+      <section id="dashboard" class="active">
+        <h1>Office workspace</h1>
+        <p class="muted">
+          Import once. Review the source. Prepare a traceable statement.
+        </p>
+        <div class="card">
+          <h2>Start a task</h2>
+          <button class="action" onclick="openModule('imports')">
+            Import an outer sheet / GA 55</button
+          ><button class="action" onclick="openModule('arrears')">
+            Prepare due–drawn</button
+          ><button class="action" onclick="openLegacy('upload')">
+            Import inner sheets
+          </button>
+        </div>
+        <div class="card">
+          <h2>Saved work</h2>
+          <div id="summary"></div>
+        </div>
+        <div class="card">
+          <b>Current calculation scope</b>
+          <p>
+            Fixed, daily and percentage allowances; reviewed pay/rate histories;
+            partial months; prior settlements and deductions. Review rates and
+            entitlement against applicable orders. Scanned pages can be
+            processed by local OCR. Review uncertain names, dates, digits and
+            signs against the source before saving payment history.
+          </p>
+        </div>
+      </section>
+      <section id="employees">
+        <h1>Employee & Group Management</h1>
+        <div class="card">
+          <form id="employeeForm">
+            <label>Employee code<input name="employee_code" required /></label
+            ><label>Name<input name="name" required /></label
+            ><label>Group<input name="group" /></label
+            ><label>Designation<input name="designation" /></label
+            ><label>Office name<input name="office_name" /></label
+            ><label>DDO code<input name="ddo_code" /></label
+            ><button class="action">Save employee</button>
+          </form>
+          <button class="action" type="button" id="importAnalyzerProfiles">
+            Review employee profiles from inner sheets
+          </button>
+          <div id="employeesTable"></div>
+          <form id="inspectEmployee">
+            <label
+              >Inspect employee pay / payment history<input
+                name="employee_code"
+                list="employeeOptions"
+                required /></label
+            ><button class="action">Show history</button>
+          </form>
+          <div id="employeeHistory"></div>
+          <h3>Review imported groups</h3>
+          <div id="groupReviews"></div>
+        </div>
+        <div class="card">
+          <button class="action" onclick="openLegacy('masterregister')">
+            Open existing master register</button
+          ><a class="action" href="/groups" target="_blank" rel="noopener"
+            >Open group spreadsheet analyzer</a
+          >
+          <p class="muted">
+            Use “Save snapshot to shared IFMS workspace” in the spreadsheet
+            analyzer, then select source rows and approve them here. Previous
+            profiles are retained when replacements are explicitly approved.
+          </p>
+        </div>
+        <div class="card">
+          <h2>Pay & eligibility timeline</h2>
+          <form id="payHistoryForm">
+            <label
+              >Employee code<input
+                name="employee_code"
+                list="employeeOptions"
+                required /></label
+            ><label
+              >Effective from<input
+                type="date"
+                name="effective_from"
+                required /></label
+            ><label
+              >Basic pay<input
+                name="basic"
+                type="number"
+                min="0"
+                step="0.01"
+                required /></label
+            ><label
+              >Pay order / reference<input name="reference" required /></label
+            ><label
+              ><span>Eligibility</span
+              ><select name="eligible">
+                <option value="true">Eligible</option>
+                <option value="false">Not eligible / unpaid period</option>
+              </select></label
+            ><label
+              ><span>Source checked</span
+              ><input type="checkbox" name="reviewed" required /></label
+            ><button class="action">Save dated event</button>
+          </form>
+          <p class="muted">
+            Add another dated event when pay or eligibility resumes. Past events
+            are retained.
+          </p>
+        </div>
+      </section>
+      <section id="imports">
+        <h1>Outer Sheet & GA 55 imports</h1>
+        <div class="card">
+          <form id="importForm">
+            <label
+              >Document type<select name="kind">
+                <option value="outer">Outer sheet</option>
+                <option value="ga55">GA 55</option>
+                <option value="due_drawn">Existing due–drawn statement</option>
+              </select></label
+            ><label
+              >PDF / due–drawn Excel<input
+                name="file"
+                type="file"
+                accept="application/pdf,.xlsx"
+                required /></label
+            ><label
+              >OCR language<select id="ocrLanguage">
+                <option value="eng+hin">English + Hindi</option>
+                <option value="eng">English</option>
+              </select></label
+            ><button class="action">Extract for review</button>
+          </form>
+          <p class="muted">
+            Original files are retained. Extracted text is evidence, not
+            confirmed payment history.
+          </p>
+        </div>
+        <div id="importsList"></div>
+        <div class="card">
+          <button class="action" onclick="manualPayment()">
+            Enter a drawn payment manually</button
+          ><button class="action" onclick="loadAnalyzerPayments()">
+            Review an employee’s imported inner-sheet payments
+          </button>
+        </div>
+        <div id="paymentReview"></div>
+      </section>
+      <section id="arrears">
+        <h1>Arrear & Due–Drawn Maker</h1>
+        <div class="grid">
+          <div>
+            <div class="card">
+              <form id="claimForm">
+                <label
+                  >Employee code<input
+                    name="employee_code"
+                    required
+                    list="employeeOptions" /></label
+                ><datalist id="employeeOptions"></datalist
+                ><label
+                  >Allowance<input
+                    name="allowance"
+                    list="allowances"
+                    value="DA"
+                    required /></label
+                ><label
+                  >Entitlement<select name="entitlement_type">
+                    <option value="salary">Regular salary arrear</option>
+                    <option value="leave_encashment">
+                      Leave encashment / surrender arrear
+                    </option>
+                  </select></label
+                ><datalist id="allowances">
+                  <option>DA</option>
+                  <option>HRA</option>
+                  <option>HDA</option>
+                  <option>CCA</option></datalist
+                ><label
+                  >From<input
+                    name="start"
+                    type="date"
+                    value="2025-01-01"
+                    required /></label
+                ><label
+                  >Through (inclusive)<input
+                    name="end"
+                    type="date"
+                    value="2025-03-31"
+                    required /></label
+                ><label
+                  >Preparation<select name="source" id="claimSource">
+                    <option value="manual">Enter periods manually</option>
+                    <option value="history">
+                      Use reviewed payment & pay history
+                    </option>
+                  </select></label
+                ><label
+                  >HRA / rate category<select name="category">
+                    <option value="">General</option>
+                    <option>Y</option>
+                    <option>Z</option>
+                  </select></label
+                ><label
+                  >Calculation basis<select id="claimBasis">
+                    <option value="basic">Percentage of basic</option>
+                    <option value="basic_da">Percentage of basic + DA</option>
+                    <option value="fixed">Fixed monthly amount</option>
+                    <option value="daily">Amount per day</option>
+                  </select></label
+                ><label
+                  >Proration<select id="claimProration">
+                    <option value="calendar">Actual calendar days</option>
+                    <option value="thirty">30-day rule (verify order)</option>
+                  </select></label
+                ><label
+                  >Rounding<select id="claimRounding">
+                    <option value="paise">Two decimal places</option>
+                    <option value="rupee">Whole rupees</option>
+                  </select></label
+                ><label
+                  >Rounding scope<select id="claimRoundingScope">
+                    <option value="month">Combine month before rounding</option>
+                    <option value="segment">Round each pay / rate slice</option>
+                  </select></label
+                ><label
+                  >DA allocation<select name="allocation_policy">
+                    <option value="manual">Manual deductions</option>
+                    <option value="source_order">
+                      Apply verified order timing (DA history only)
+                    </option>
+                  </select></label
+                ><label
+                  >Scheme for claim period<select name="scheme">
+                    <option value="">Select if order allocation used</option>
+                    <option>GPF</option>
+                    <option>GPF-2004</option>
+                    <option>GPF-SAB</option>
+                  </select></label
+                ><label
+                  >Drawn entries<select id="drawnMode">
+                    <option value="rate">
+                      Percentage / monthly entitlement
+                    </option>
+                    <option value="actual">
+                      Actual paid for each selected period
+                    </option>
+                  </select></label
+                >
+                <p>
+                  Add a row at each pay or rate change. Drawn rates must be
+                  confirmed from payment records. All figures use percentage of
+                  basic.
+                </p>
+                <div class="scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>From</th>
+                        <th>Through</th>
+                        <th>Basic</th>
+                        <th>Due % / amount</th>
+                        <th>Drawn % / amount</th>
+                        <th>Prior settlement</th>
+                        <th>Due DA % (HDA basis)</th>
+                        <th>Drawn DA %</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="segments"></tbody>
+                  </table>
+                </div>
+                <button type="button" class="action" onclick="addSegment()">
+                  Add pay / rate period
+                </button>
+                <h3>Deductions / allocation</h3>
+                <div id="deductionRows"></div>
+                <button type="button" class="action" onclick="addDeduction()">
+                  Add deduction / GPF allocation</button
+                ><button class="action">Calculate & save draft</button>
+              </form>
+            </div>
+            <div id="calculation"></div>
+          </div>
+          <div class="card">
+            <h2>Applicable rates</h2>
+            <p class="muted">
+              Library entries are manually supplied. Select and verify the
+              correct effective dates; rates are not silently applied.
+            </p>
+            <div id="rateReference"></div>
+          </div>
+        </div>
+      </section>
+      <section id="rates">
+        <h1>Rates & Allowance Library</h1>
+        <div class="card">
+          <h2>Save an allowance rule</h2>
+          <form id="ruleForm">
+            <label
+              >Name<input name="name" placeholder="HDA, CCA…" required /></label
+            ><label
+              >Basis<select name="basis">
+                <option value="basic">Percentage of basic</option>
+                <option value="basic_da">Percentage of basic + DA</option>
+                <option value="fixed">Fixed monthly amount</option>
+                <option value="daily">Amount per day</option>
+              </select></label
+            ><label
+              >Proration<select name="proration">
+                <option value="calendar">Calendar days</option>
+                <option value="thirty">Prescribed 30-day rule</option>
+              </select></label
+            ><label
+              >Rounding<select name="rounding">
+                <option value="paise">Two decimals</option>
+                <option value="rupee">Whole rupees</option>
+              </select></label
+            ><label
+              >Rounding scope<select name="rounding_scope">
+                <option value="month">Combine month before rounding</option>
+                <option value="segment">Round each slice</option>
+              </select></label
+            ><label
+              >Rule / order reference<input name="reference" required /></label
+            ><button class="action">Save rule</button>
+          </form>
+          <div id="rulesTable"></div>
+        </div>
+        <div class="card">
+          <form id="rateForm">
+            <label
+              >Allowance<input name="allowance" required value="DA" /></label
+            ><label
+              >Effective from<input
+                name="effective_from"
+                type="date"
+                required /></label
+            ><label
+              >Category<select name="category">
+                <option value="">General</option>
+                <option>Y</option>
+                <option>Z</option>
+              </select></label
+            ><label
+              >Rate / monthly / daily amount<input
+                name="rate"
+                type="number"
+                step="0.0001"
+                required /></label
+            ><label>Order date<input name="order_date" type="date" /></label
+            ><label
+              >Order / source reference<input
+                name="reference"
+                required /></label
+            ><label
+              >Reason if replacing an existing effective-date rate<input
+                name="override_reason" /></label
+            ><button class="action">Save manual rate</button>
+          </form>
+          <p class="muted">
+            Verified entries identify the official source. Manually entered
+            rates remain marked manual; confirm applicability and category
+            before use.
+          </p>
+          <div id="ratesTable"></div>
+        </div>
+      </section>
+      <section id="reports">
+        <h1>Saved statements</h1>
+        <div class="card">
+          <h2>Prepare a batch from reviewed histories</h2>
+          <form id="batchForm">
+            <label
+              >Employee codes (comma separated)<input
+                name="employees"
+                required /></label
+            ><label
+              >Allowance<input name="allowance" value="DA" required /></label
+            ><label
+              >Category<select name="category">
+                <option value="">General</option>
+                <option>Y</option>
+                <option>Z</option>
+              </select></label
+            ><label>From<input type="date" name="start" required /></label
+            ><label>Through<input type="date" name="end" required /></label
+            ><button class="action">Prepare batch</button>
+          </form>
+          <p class="muted">
+            If any employee has missing or ambiguous inputs, nothing is saved.
+            Resolve the exception list and retry.
+          </p>
+          <div id="batchResult"></div>
+        </div>
+        <div class="card">
+          <a class="action" href="/suite/api/backup"
+            >Download complete backup (records + source documents)</a
+          >
+          <details>
+            <summary>Restore a trusted workspace backup</summary>
+            <p>
+              Restore is applied after closing and restarting the workspace. A
+              backup of the current workspace is created first.
+            </p>
+            <form id="restoreForm">
+              <label
+                >Backup ZIP<input
+                  name="file"
+                  type="file"
+                  accept=".zip"
+                  required /></label
+              ><label
+                >Type RESTORE to schedule replacement<input
+                  name="confirmation"
+                  required /></label
+              ><button type="button" class="action" id="previewRestore">
+                Check backup</button
+              ><button class="action">Schedule restore after restart</button>
+            </form>
+          </details>
+        </div>
+        <div id="claimsList"></div>
+        <div class="card">
+          <button class="action" onclick="openLegacy('backup')">
+            Backup & Restore</button
+          ><button class="action" onclick="openLegacy('exportcenter')">
+            Existing Export Centre
+          </button>
+        </div>
+      </section>
+      <section id="legacy">
+        <h1 id="legacyTitle">Inner Sheet Analyzer</h1>
+        <iframe id="legacyFrame" title="Existing analyzer"></iframe>
+      </section>
+    </main>
+    <script src="{{ url_for('suite.static',filename='suite.js') }}"></script>
+  </body>
+</html>

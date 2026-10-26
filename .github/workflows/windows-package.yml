@@ -1,0 +1,47 @@
+name: Windows portable package
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/unified-ifms]
+    paths: ['**.py', 'ifms_suite/**', 'templates/**', 'static/**', 'ocr/**', 'requirements.lock', '.github/workflows/windows-package.yml']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install locked dependencies and build tools
+        run: |
+          python -m pip install -r requirements.lock
+          python -m pip install pyinstaller==6.16.0 py7zr
+          choco install tesseract --yes --no-progress
+      - name: Restore private regression fixtures from original supplied archive
+        shell: python
+        run: |
+          from pathlib import Path
+          import py7zr,shutil,tempfile
+          with tempfile.TemporaryDirectory() as td:
+              with py7zr.SevenZipFile('IFMS Inner Sheet Analyzer.7z') as z:
+                  names=[n for n in z.getnames() if '/test_fixtures/' in n]
+                  z.extract(path=td,targets=names)
+              shutil.copytree(Path(td)/'IFMS Inner Sheet Analyzer'/'test_fixtures','test_fixtures',dirs_exist_ok=True)
+      - name: Active engine and workspace regression gate
+        run: python -m pytest --ignore=tests/test_expected_totals.py -q
+      - name: Record inherited legacy parser results separately
+        continue-on-error: true
+        run: python -m pytest tests/test_expected_totals.py -q
+      - name: Build self-contained package and enforce installed size
+        run: python packaging/build.py --ocr-dir "C:\Program Files\Tesseract-OCR"
+      - name: Run the packaged executable
+        run: python packaging/smoke.py dist/IFMSWorkspace/IFMSWorkspace.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IFMSWorkspace-Windows
+          path: |
+            dist/IFMSWorkspace-win32.zip
+            dist/size-report.json

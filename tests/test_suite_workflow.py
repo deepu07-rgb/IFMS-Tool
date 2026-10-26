@@ -73,3 +73,11 @@ def test_concurrent_overlapping_finalizations_allow_only_one(client):
     with ThreadPoolExecutor(max_workers=8) as ex:statuses=list(ex.map(finalize,ids))
     assert statuses.count(200)==1
     assert statuses.count(400)==7
+
+def test_leave_encashment_and_salary_claims_have_distinct_entitlements(client):
+    p=dict(employee_code='RJ1',allowance='DA',start='2025-01-01',end='2025-01-31',segments=[dict(start='2025-01-01',end='2025-01-31',basic='50000',due_rate='55',drawn_rate='53')])
+    review=dict(reviewed=True,rule_reference='Order',drawn_reference='Bill')
+    salary=client.post('/suite/api/claims',json=p).json['id']
+    assert client.post(f'/suite/api/claims/{salary}/finalize',json=review).status_code==200
+    leave=client.post('/suite/api/claims',json=dict(p,entitlement_type='leave_encashment')).json['id']
+    assert client.post(f'/suite/api/claims/{leave}/finalize',json=review).status_code==200

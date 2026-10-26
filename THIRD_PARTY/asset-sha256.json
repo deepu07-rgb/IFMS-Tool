@@ -1,0 +1,8 @@
+{
+  "static/chart.umd.min.js": "48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a",
+  "static/xlsx.full.min.js": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
+  "ocr/tessdata/hin.traineddata": "4c73ffc59d497c186b19d1e90f5d721d678ea6b2e277b719bee4e2af12271825",
+  "ocr/tessdata/pdf.ttf": "c7845420925a23d88ed830a63957b8af85a66a8daf8d9fc90e843673b2ef1a59",
+  "ocr/tessdata/eng.traineddata": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+  "ocr/tessdata/configs/pdf": "54d56e81dfefe289b0d2e4c7bc9bbe662711f5b8255c128b73bcd66efb6bba1a"
+}
