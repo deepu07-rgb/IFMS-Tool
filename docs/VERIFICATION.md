@@ -17,3 +17,17 @@ Known functional boundaries: handwritten/unknown-layout OCR needs review; MACP/s
 Independent financial review found five issues and each was reproduced before correction. Added regressions cover February/leap-February/31-day slicing, paid January/February allocation conservation, explicit partial drawn review, unreadable employee identity, and validated leave-encashment revisions. Updated active suite: **143 passed, 14 skipped**. The full browser acceptance passed again after these fixes. The rebuilt Linux executable, including fonts/models/libraries, is **316,217,155 bytes**; real packaged English+Hindi OCR and PDF/Excel smoke checks passed. Linux uses a system OCR binary, so this is not Windows installed-size evidence.
 
 Windows CI exposed a host-specific MIME problem in the retained employee Excel export: XLSX was served as `application/octet-stream` on a clean Windows image. A regression now simulates missing file associations, and retained audit/schedule/employee Excel responses declare their MIME type explicitly. The updated Linux active gate passes **144 tests, 14 skipped**; the complete run before that extra regression was **144 passed, 14 skipped, 13 inherited V1 failures**. Windows rerun #3 is the remaining platform gate.
+
+
+## Windows result
+
+The mandatory Windows build succeeded at source commit `a61ad43`:
+https://github.com/deepu07-rgb/IFMS-Tool/actions/runs/40271821514
+
+Download **IFMSWorkspace-Windows** under Artifacts (GitHub sign-in required). The artifact is approximately **153 MB compressed**, and contains `IFMSWorkspace-win32.zip` and `size-report.json`. Extract the inner ZIP, then run `IFMSWorkspace/IFMSWorkspace.exe`. The mandatory installed-size check includes Python, dependencies, bundled OCR executable/DLLs, English/Hindi models, PDF font/config and manifest; it rejects 500,000,000 bytes or more. Its successful result establishes the Windows size gate, rather than using compressed archive size as a proxy. The exact installed byte count is in the supplied report.
+
+The same job ran the actual Windows executable in a fresh data directory and passed calculation, PDF/Excel, database and real English+Hindi raster OCR checks. All active regressions passed. The run also displays an expected error annotation from the deliberately separate, non-blocking inherited V1 test step; this is not a new workspace regression. No automatic merge or release was performed.
+
+GitHub artifact digest: `sha256:42e14625ae2097bc961134c98ce075e35bd64d5bc5f3ef5378e1bc68026c82c3`.
+
+Final Linux package: 316,217,299 bytes with system Tesseract; actual packaged smoke passed. Additional Chromium checks passed reviewed monthly allocation entry, mobile/desktop viewport containment, paid leave revision from1000 to1200 with remaining200, and offline loading of the retained inner/group interfaces.

@@ -9,26 +9,28 @@ Windows first; installed footprint below 500 MB; offline operation; no fabricate
 ## Review Focus
 Negative adjustments; missing drawn values; ambiguous identity; duplicate settlements; February and mid-month effective changes.
 ### Task 1: extraction baseline
-Files: outer_engine/parser.py; tests/test_suite.py; retained app.py and ifms_engine.
-- [ ] Write regression for signed money, ROP and non-1xx/2xx deduction heads; run RED.
-- [ ] Correct signed extraction and gross reconciliation; run GREEN.
+Files: outer_engine/parser.py; tests/test_signed_outer.py; retained app.py and ifms_engine.
+- [x] Write regression for signed money, ROP and non-1xx/2xx deduction heads; run RED.
+- [x] Correct signed extraction and gross reconciliation; run GREEN.
 ### Task 2: deterministic engine
 Files: ifms_suite/calculation.py; tests/test_arrears.py.
 Interface: calculate_claim(start,end,segments) -> rows/totals; segments have inclusive start/end, basic, due_rate, drawn_rate, prior_settlement and proration.
-- [ ] Tests: three months; 19/31 partial month; leap year; rate boundary; missing drawn; overlap; signed recovery; settlement.
-- [ ] Run RED, implement Decimal arithmetic and validated segments, run GREEN.
+- [x] Tests: three months; 19/31 partial month; leap year; rate boundary; missing drawn; overlap; signed recovery; settlement.
+- [x] Run RED, implement Decimal arithmetic and validated segments, run GREEN.
 ### Task 3: integrated persistent workspace
 Files: ifms_suite/web.py, storage.py, templates/suite.html, static/suite.js; app.py.
 Interfaces: /suite/api/employees, rates, claims, imports; shared app.config DATABASE; source records separate from reviewed records.
-- [ ] Test real Flask/SQLite workflows for conflicting identity, rate intervals, persisted claims, finalization blockers and duplicate imports.
-- [ ] Implement sidebar and source review; retain original UI under /analyzer and group tool under /groups.
-- [ ] Run workflow tests and actual HTTP readiness.
+- [x] Test real Flask/SQLite workflows for conflicting identity, rate intervals, persisted claims, finalization blockers and duplicate imports.
+- [x] Implement sidebar and source review; retain original UI under /analyzer and group tool under /groups.
+- [x] Run workflow tests and actual HTTP readiness.
 ### Task 4: documents and export
-Files: ifms_suite/documents.py, exports.py; tests/test_documents.py.
-- [ ] Tests for GA55 continuation/type handling, source links, import review, PDF/XLSX numerical parity and backup inclusion.
-- [ ] Implement text-first PDF extraction, local OCR fallback, structured review; export reviewed snapshots.
-- [ ] Validate supplied PDFs and workbook cases. No auto-confirmation of uncertain OCR.
+Files: ifms_suite/documents.py, exports.py; tests/test_ga55.py, test_document_exports.py, test_suite_backup.py.
+- [x] Tests for GA55 continuation/type handling, source links, import review, PDF/XLSX numerical parity and backup inclusion.
+- [x] Implement text-first PDF extraction, local OCR fallback, structured review; export reviewed snapshots.
+- [x] Validate supplied PDFs and workbook cases. No auto-confirmation of uncertain OCR.
 ### Task 5: reproducibility and packaging
 Files: start_tool.bat, README.md, packaging/; tests.
-- [ ] Windows launcher, dependency locking and size budget; official rate research with sources.
-- [ ] Run retained suite; diagnose failures, review branch and document exact limitations.
+- [x] Windows launcher, dependency locking and size budget; official rate research with sources.
+- [x] Run retained suite; diagnose failures, review branch and document exact limitations.
+
+Completion evidence (26 October 2026): docs/VERIFICATION.md and docs/PROGRESS.md. Windows run40271821514 passed at source commita61ad43; artifact IFMSWorkspace-Windows created. Active Linux gate144 passed/14 skipped; inherited inactive V1 expected-total failures remain documented separately. Source originals preserved; handwritten/unknown layouts and eligibility still require review per the approved design.
