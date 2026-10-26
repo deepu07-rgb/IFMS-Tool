@@ -30,4 +30,4 @@ The same job ran the actual Windows executable in a fresh data directory and pas
 
 GitHub artifact digest: `sha256:42e14625ae2097bc961134c98ce075e35bd64d5bc5f3ef5378e1bc68026c82c3`.
 
-Final Linux package: 316,217,299 bytes with system Tesseract; actual packaged smoke passed. Additional Chromium checks passed reviewed monthly allocation entry, mobile/desktop viewport containment, paid leave revision from1000 to1200 with remaining200, and offline loading of the retained inner/group interfaces.
+Final Linux package: 316,217,299 bytes with system Tesseract; actual packaged smoke passed. Additional Chromium checks passed reviewed monthly allocation entry, mobile/desktop viewport containment, paid leave revision from ₹1,000 to ₹1,200 with ₹200 remaining, and offline loading of the retained inner/group interfaces.
