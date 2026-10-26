@@ -14,6 +14,79 @@ from .documents import MONTHS, ocr_runtime
 from .payment_types import classify_bill, entitlement_type
 
 
+def is_ga55_header(text):
+    compact = re.sub(r"\s+", "", text).upper()
+    form = bool(re.search(r"GA[S5]{2}", compact))
+    government = bool(re.search(r"GO[VY]ERNMENTOFRAJASTHAN", compact))
+    table = all(word in compact for word in ("FINANCIALYEAR", "PAYMONTH", "GROSS"))
+    identity = all(
+        word in compact for word in ("FINANCIALYEAR", "EMPLOYEENAME", "GPFNUMBER")
+    )
+    salary = "FINANCIALYEAR" in compact and all(
+        word in compact for word in ("HRA", "CCA", "HDA")
+    )
+    return (
+        (form and government)
+        or (table and (form or government))
+        or (form and identity)
+        or (government and salary)
+    )
+
+
+def needs_column_ocr(payload):
+    payments = payload.get("payments", [])
+    if not payments:
+        return True
+    for payment in payments:
+        try:
+            gross = Decimal(str(payment["printed_gross"]))
+            total = sum(Decimal(str(v)) for v in payment["allowances"].values())
+            if not gross.is_finite() or total != gross:
+                return True
+        except (KeyError, ValueError, ArithmeticError):
+            return True
+    return False
+
+
+def improve_scanned_ga55(base, data):
+    """Keep reconciled first-pass pages; supplement only uncovered pages."""
+    if not needs_column_ocr(base):
+        return base
+    import pymupdf
+
+    with pymupdf.open(stream=data, filetype="pdf") as doc:
+        if len(doc) > 40:
+            return dict(
+                base,
+                notice="Column OCR supports up to 40 pages; split this document for column review. First-pass results retained.",
+            )
+    candidate = parse_scanned_ga55_tables(data)
+    protected = {
+        page
+        for payment in base.get("payments", [])
+        if not needs_column_ocr({"payments": [payment]})
+        for page in payment.get("source_pages", [])
+    }
+    extra = [
+        p
+        for p in candidate["payments"]
+        if not protected.intersection(p.get("source_pages", []))
+    ]
+    if not extra:
+        return base
+    covered = {page for payment in extra for page in payment.get("source_pages", [])}
+    retained = [
+        p
+        for p in base.get("payments", [])
+        if not covered.intersection(p.get("source_pages", []))
+    ]
+    return dict(
+        candidate,
+        payments=retained + extra,
+        previous_pass_candidates=len(base.get("payments", [])),
+    )
+
+
 def _ocr(page, box, executable, env, tsv=False):
     import pymupdf
 
@@ -117,9 +190,10 @@ def parse_scanned_ga55_tables(data):
             raise ValueError("Split column OCR into at most40 pages")
         for page in doc:
             title = page.get_text()
-            if not re.search(r"(?i)Government\s+Of\s+Rajasthan", title):
-                continue
-            if not re.search(r"(?i)GA[S5]{2}", title.replace(" ", "")):
+            header = page.get_text(
+                clip=pymupdf.Rect(0, 0, page.rect.width, page.rect.height * 0.20)
+            )
+            if not is_ga55_header(header):
                 continue
             box = (0.035, 0.12, 0.108, 0.92)
             raw, height = _ocr(page, box, executable, env, True)

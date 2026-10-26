@@ -518,12 +518,9 @@ def ocr_import(id):
         payload["ocr_used"] = True
         if payload["kind"] == "ga55":
             payload["ga55"] = parse_ga55(pages)
-            if not payload["ga55"]["payments"]:
-                from .ga55_table_ocr import parse_scanned_ga55_tables
+            from .ga55_table_ocr import improve_scanned_ga55
 
-                candidate = parse_scanned_ga55_tables(derivative)
-                if candidate["payments"]:
-                    payload["ga55"] = candidate
+            payload["ga55"] = improve_scanned_ga55(payload["ga55"], derivative)
 
         if payload["kind"] == "due_drawn":
             from .due_drawn import parse_pdf_tables

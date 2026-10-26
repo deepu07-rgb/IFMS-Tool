@@ -243,6 +243,15 @@ def calculate_payload(db, p):
             )
         if any("GPF" in identity(d.get("name")) for d in deductions):
             raise ValueError("Do not combine automatic and manual GPF allocation")
+        if any(
+            segment.get("drawn_basic") is None
+            or money(segment["drawn_basic"]) != money(segment["basic"])
+            for segment in p["segments"]
+        ):
+            raise ValueError(
+                "Automatic DA-order allocation requires unchanged source-reviewed drawn basic; "
+                "for pay fixation or missing basic, review the rate-revision layer and enter GPF manually"
+            )
         base = calculate_claim(p["start"], p["end"], p["segments"])
         deferred = money("0")
         for segment, row in zip(p["segments"], base["rows"]):

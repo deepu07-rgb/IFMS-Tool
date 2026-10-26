@@ -146,6 +146,7 @@ def prepare_segments(start, end, allowance, rates, pay_history, payments, rule):
             start=str(a),
             end=str(b),
             basic=str(pay["basic"]),
+            drawn_basic=str(heads["BASIC"]) if "BASIC" in heads else None,
             basis=rule.get("basis", "basic"),
             due_rate=str(rate["rate"]),
             due_amount=str(rate["rate"]),
