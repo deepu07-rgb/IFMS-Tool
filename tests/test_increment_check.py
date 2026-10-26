@@ -130,3 +130,38 @@ def test_already_updated_august_salary_has_no_increment_arrear(client):
     r = client.post("/suite/api/increment_check", json=p)
     assert r.status_code == 201
     assert r.json["total"] == "0.00"
+
+
+def test_midmonth_rate_added_after_drafting_blocks_finalization(client):
+    p = setup(client)
+    id = client.post("/suite/api/increment_check", json=p).json["claim_ids"][1]
+    client.post(
+        "/suite/api/rates",
+        json=dict(
+            allowance="DA",
+            rate="65",
+            effective_from="2026-07-15",
+            reference="Interior rate change",
+        ),
+    )
+    r = client.post(
+        f"/suite/api/claims/{id}/finalize",
+        json=dict(reviewed=True, rule_reference="Order", drawn_reference="GA55"),
+    )
+    assert r.status_code == 400
+
+
+def test_bounded_midmonth_rate_cannot_be_missed_between_equal_endpoints(client):
+    p = setup(client)
+    client.post(
+        "/suite/api/rates",
+        json=dict(
+            allowance="DA",
+            rate="65",
+            effective_from="2026-07-15",
+            effective_to="2026-07-20",
+            reference="Bounded interior rate",
+        ),
+    )
+    r = client.post("/suite/api/increment_check", json=p)
+    assert r.status_code == 400

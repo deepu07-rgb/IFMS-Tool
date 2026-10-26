@@ -257,7 +257,7 @@ def finalize(id):
                 payload["end"],
                 payload.get("increment_heads", [payload["allowance"]]),
             )
-            from .history import active
+            from .increments import period_rate
             from datetime import date
 
             current_rates = [
@@ -265,7 +265,7 @@ def finalize(id):
                 for r in db.execute("SELECT payload FROM suite_rates")
             ]
             for head, saved in payload.get("rate_snapshot", {}).items():
-                current = active(
+                current = period_rate(
                     [
                         r
                         for r in current_rates
@@ -273,6 +273,7 @@ def finalize(id):
                         and r.get("category", "") == saved.get("category", "")
                     ],
                     date.fromisoformat(payload["start"]),
+                    date.fromisoformat(payload["end"]),
                     head + " rate",
                 )
                 if current != saved:

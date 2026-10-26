@@ -1,7 +1,7 @@
 """Reviewed increment reconciliation using dated library rates and actual drawn heads."""
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from calendar import monthrange
 from decimal import Decimal
 from flask import request, jsonify
@@ -10,6 +10,24 @@ from .calculation import money, rounded, calculate_claim
 from .history import active
 from .payroll import identity, payment_records
 from .payment_types import payment_class, entitlement_type
+
+
+def period_rate(rates, start, end, label):
+    selected = active(rates, start, label)
+    boundaries = {end}
+    for row in rates:
+        first = date.fromisoformat(row["effective_from"])
+        if start < first <= end:
+            boundaries.add(first)
+        if row.get("effective_to"):
+            last = date.fromisoformat(row["effective_to"])
+            if start <= last < end:
+                boundaries.add(last + timedelta(days=1))
+    if any(active(rates, day, label) is not selected for day in boundaries):
+        raise ValueError(
+            "Split the period at every effective rate change; use dated segments"
+        )
+    return selected
 
 
 def guard_prior_increment(db, code, start, end, heads):
@@ -84,9 +102,7 @@ def register_increments(suite):
                     and r.get("category", "")
                     == (p.get("category", "") if head == "HRA" else "")
                 ]
-                rate = active(eligible, a, head + " rate")
-                if active(eligible, b, head + " rate") is not rate:
-                    raise ValueError("Split the period at the effective rate change")
+                rate = period_rate(eligible, a, b, head + " rate")
                 selected[head] = rate
             da = money(selected["DA"]["rate"])
             hra = money(selected["HRA"]["rate"])
