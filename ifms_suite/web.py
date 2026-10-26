@@ -243,6 +243,10 @@ def finalize(id):
                 raise ValueError(
                     "Reviewed history or rates changed. Prepare a fresh draft and review its calculation."
                 )
+        else:
+            from .payroll import validate_manual_settlements
+
+            validate_manual_settlements(db, payload)
         for other in db.execute(
             "SELECT * FROM suite_claims WHERE status IN ('finalized','paid')"
         ):
@@ -268,13 +272,12 @@ def finalize(id):
             }
             if (
                 other["status"] == "paid"
-                and payload.get("source") == "history"
                 and settlement
                 and settlement["payment_id"] in applied
             ):
                 continue
             raise ValueError(
-                "Overlapping finalized claim: link its actual settlement before preparing a history-based revision"
+                "Overlapping finalized claim: link and deduct its actual saved settlement before preparing a revision"
             )
         db.execute(
             "UPDATE suite_claims SET status='finalized',review=? WHERE id=?",

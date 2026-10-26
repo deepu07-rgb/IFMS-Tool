@@ -89,13 +89,18 @@ function addSegment(s = {}) {
     "prior_settlement",
     "due_da_rate",
     "drawn_da_rate",
+    "settlement_ids",
   ]) {
     const td = document.createElement("td"),
       i = document.createElement("input");
     i.dataset.key = k;
-    i.type = ["start", "end"].includes(k) ? "date" : "number";
+    i.type = ["start", "end"].includes(k)
+      ? "date"
+      : k === "settlement_ids"
+        ? "text"
+        : "number";
     i.step = "0.0001";
-    i.required = !k.includes("da_rate");
+    i.required = !k.includes("da_rate") && k !== "settlement_ids";
     i.style.width = ["start", "end"].includes(k) ? "145px" : "100px";
     i.value = s[k] ?? (k === "prior_settlement" ? "0" : "");
     td.append(i);
@@ -174,6 +179,7 @@ function updateSegmentControls() {
     i.disabled = history || unused;
     i.required =
       !i.disabled &&
+      key !== "settlement_ids" &&
       (!key.includes("da_rate") ||
         key === "due_da_rate" ||
         $("drawnMode").value !== "actual");
@@ -204,6 +210,7 @@ $("claimForm").onsubmit = async (e) => {
   try {
     const p = Object.fromEntries(new FormData(e.target));
     p.deductions = deductions();
+    p.uniform_drawn_reviewed = e.target.elements.uniform_drawn_reviewed.checked;
     if (p.source === "manual") {
       p.segments = [...$("segments").rows].map((tr) => {
         const s = Object.fromEntries(
@@ -212,6 +219,11 @@ $("claimForm").onsubmit = async (e) => {
             i.value,
           ]),
         );
+        s.settlement_ids = (s.settlement_ids || "")
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .map(Number);
         s.basis = $("claimBasis").value;
         s.proration = $("claimProration").value;
         s.rounding = $("claimRounding").value;
@@ -745,7 +757,7 @@ $("inspectEmployee").onsubmit = async (e) => {
                 amount,
               })),
               ["head", "amount"],
-            )}<p>Entitlement period: ${escapeHTML(p.entitlement_period?.start || "not assigned")} — ${escapeHTML(p.entitlement_period?.end || "")}</p>${!p.entitlement_period && p.bill_type.toLowerCase() !== "regular salary" ? `<form data-allocation="${p.id}"><label>Entitlement from<input type="date" name="start" required></label><label>Through<input type="date" name="end" required></label><label>Sanction / source reference<input name="reference" required></label><label><span>Period checked against source</span><input name="reviewed" type="checkbox" required></label><button class="action">Assign arrear period</button></form>` : ""}</details>`,
+            )}<p>Entitlement period: ${escapeHTML(p.entitlement_period?.start || "not assigned")} — ${escapeHTML(p.entitlement_period?.end || "")}</p>${!p.entitlement_period && p.bill_type.toLowerCase() !== "regular salary" ? `<form data-allocation="${p.id}"><label>Entitlement from<input type="date" name="start" required></label><label>Through<input type="date" name="end" required></label><label>Sanction / source reference<input name="reference" required></label><label><span>Period checked against source</span><input name="reviewed" type="checkbox" required></label><button class="action">Assign arrear period</button></form>` : ""}${monthlyAllocationForm(p)}</details>`,
         )
         .join("");
   } catch (x) {
@@ -755,11 +767,24 @@ $("inspectEmployee").onsubmit = async (e) => {
 $("employeeHistory").onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target;
-  if (!f.dataset.allocation) return;
+  if (!f.dataset.allocation && !f.dataset.monthlyAllocation) return;
   try {
     const p = Object.fromEntries(new FormData(f));
     p.reviewed = f.elements.reviewed.checked;
-    await post(`payments/${f.dataset.allocation}/allocate`, p);
+    if (f.dataset.monthlyAllocation) {
+      p.rows = [...f.querySelectorAll("tbody tr")].map((tr) =>
+        Object.fromEntries(
+          [...tr.querySelectorAll("input")].map((i) => [
+            i.dataset.key,
+            i.value,
+          ]),
+        ),
+      );
+      await post(
+        `payments/${f.dataset.monthlyAllocation}/period_allocations`,
+        p,
+      );
+    } else await post(`payments/${f.dataset.allocation}/allocate`, p);
     notify("Entitlement period saved");
     $("inspectEmployee").requestSubmit();
   } catch (x) {
@@ -894,3 +919,37 @@ $("importAnalyzerProfiles").onclick = async () => {
     notify(e.message);
   }
 };
+
+function monthlyAllocationForm(p) {
+  if (p.payment_class !== "allowance_arrear" || !p.entitlement_period)
+    return "";
+  const heads = Object.keys(p.allowances).filter(
+    (h) => !p.allocations_by_head?.[h],
+  );
+  const saved = Object.entries(p.allocations_by_head || {})
+    .map(
+      ([head, parts]) =>
+        `<h4>Saved ${escapeHTML(head)} allocations</h4>${table(parts, ["start", "end", "amount"])}`,
+    )
+    .join("");
+  if (!heads.length) return saved;
+  const rows = [];
+  let cursor = p.entitlement_period.start;
+  while (cursor <= p.entitlement_period.end && rows.length < 1200) {
+    const [y, m] = cursor.split("-").map(Number),
+      last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const monthEnd = `${y}-${String(m).padStart(2, "0")}-${last}`;
+    const end =
+      monthEnd < p.entitlement_period.end ? monthEnd : p.entitlement_period.end;
+    rows.push(
+      `<tr><td><input data-key="start" type="date" value="${cursor}" required></td><td><input data-key="end" type="date" value="${end}" required></td><td><input data-key="amount" type="number" step="0.01" required></td></tr>`,
+    );
+    const next = new Date(end + "T00:00:00Z");
+    next.setUTCDate(next.getUTCDate() + 1);
+    cursor = next.toISOString().slice(0, 10);
+  }
+  return (
+    saved +
+    `<form data-monthly-allocation="${p.id}"><h4>Review monthly arrear amounts</h4><label>Allowance<select name="head">${heads.map((h) => `<option>${escapeHTML(h)}</option>`).join("")}</select></label><p>Enter the amounts in the original monthly statement. Dates and total must reconcile with this bill. Saved allocations cannot be overwritten.</p><div class="scroll"><table><thead><tr><th>From</th><th>Through</th><th>Actual arrear paid</th></tr></thead><tbody>${rows.join("")}</tbody></table></div><label>Source reference<input name="reference" required></label><label><span>Monthly amounts checked</span><input name="reviewed" type="checkbox" required></label><button class="action">Save reviewed monthly amounts</button></form>`
+  );
+}

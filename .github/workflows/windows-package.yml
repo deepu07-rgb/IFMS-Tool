@@ -3,7 +3,16 @@ on:
   workflow_dispatch:
   push:
     branches: [feat/unified-ifms]
-    paths: ['**.py', 'ifms_suite/**', 'templates/**', 'static/**', 'ocr/**', 'requirements.lock', '.github/workflows/windows-package.yml']
+    paths:
+      [
+        "**.py",
+        "ifms_suite/**",
+        "templates/**",
+        "static/**",
+        "ocr/**",
+        "requirements.lock",
+        ".github/workflows/windows-package.yml",
+      ]
 permissions:
   contents: read
 jobs:
@@ -11,15 +20,17 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: Install locked dependencies and build tools
         run: |
-          python -m pip install -r requirements.lock
-          python -m pip install pyinstaller==6.16.0 py7zr
-          choco install tesseract --yes --no-progress
+          python packaging/run_checked.py Dependencies -- python -m pip install -r requirements.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python packaging/run_checked.py Build-tools -- python -m pip install pyinstaller==6.16.0 py7zr
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python packaging/run_checked.py Tesseract -- choco install tesseract --yes --no-progress
       - name: Restore private regression fixtures from original supplied archive
         shell: python
         run: |
@@ -31,14 +42,14 @@ jobs:
                   z.extract(path=td,targets=names)
               shutil.copytree(Path(td)/'IFMS Inner Sheet Analyzer'/'test_fixtures','test_fixtures',dirs_exist_ok=True)
       - name: Active engine and workspace regression gate
-        run: python -m pytest --ignore=tests/test_expected_totals.py -q
+        run: python packaging/run_checked.py Regression -- python -m pytest --ignore=tests/test_expected_totals.py -q
       - name: Record inherited legacy parser results separately
         continue-on-error: true
         run: python -m pytest tests/test_expected_totals.py -q
       - name: Build self-contained package and enforce installed size
-        run: python packaging/build.py --ocr-dir "C:\Program Files\Tesseract-OCR"
+        run: python packaging/run_checked.py Package -- python packaging/build.py --ocr-dir "C:\Program Files\Tesseract-OCR"
       - name: Run the packaged executable
-        run: python packaging/smoke.py dist/IFMSWorkspace/IFMSWorkspace.exe
+        run: python packaging/run_checked.py Smoke -- python packaging/smoke.py dist/IFMSWorkspace/IFMSWorkspace.exe
       - uses: actions/upload-artifact@v4
         with:
           name: IFMSWorkspace-Windows

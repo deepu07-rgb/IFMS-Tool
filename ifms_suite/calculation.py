@@ -115,11 +115,14 @@ def calculate_claim(start, end, segments, deductions=None):
             raise ValueError("Overlapping segments")
         days = (last - cursor).days + 1
         denominator = 30 if s.get("proration") == "thirty" else month_end.day
-        factor = (
-            Decimal(1)
-            if cursor.day == 1 and last == month_end
-            else Decimal(days) / denominator
+        # Explicit 30-day service convention: day 31 adds no service unit;
+        # February's final day completes the 30-unit month. Slices are additive.
+        payable_days = (
+            (30 if last == month_end else min(last.day, 30)) - min(cursor.day - 1, 30)
+            if s.get("proration") == "thirty"
+            else days
         )
+        factor = Decimal(payable_days) / denominator
         basis = s.get("basis", "basic")
         rounding = s.get("rounding", "paise")
 
@@ -133,7 +136,7 @@ def calculate_claim(start, end, segments, deductions=None):
                     if s.get("drawn_basis") == "period"
                     else value
                     * (
-                        factor
+                        Decimal(days) / month_end.day
                         if s.get("drawn_basis") == "monthly_amount"
                         else (days if basis == "daily" else factor)
                     )
@@ -172,6 +175,7 @@ def calculate_claim(start, end, segments, deductions=None):
                 end=str(last),
                 days=days,
                 denominator=denominator,
+                payable_days=payable_days,
                 basis=basis,
                 basic=str(s.get("basic") or "0"),
                 drawn_basic=str(s.get("drawn_basic") or s.get("basic") or "0"),

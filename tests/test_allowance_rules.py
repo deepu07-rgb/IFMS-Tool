@@ -69,7 +69,7 @@ def test_selected_components_and_30_day_policy_requires_explicit_rule():
         )
     )
     assert r["rows"][0]["denominator"] == 30
-    assert r["total"] == "63.33"
+    assert r["total"] == "60.00"  # Explicit 30-day service convention excludes day 31.
 
 
 @pytest.mark.parametrize(

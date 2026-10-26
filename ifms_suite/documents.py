@@ -47,11 +47,14 @@ def parse_ga55(pages):
     employee = ""
     for index, (line, page) in enumerate(tagged):
         if line.lower().replace(" ", "") == "employeeid":
-            for candidate, p in tagged[index + 1 : index + 5]:
-                value = candidate.strip().upper()
-                if re.fullmatch(r"(?=.*[0-9])[A-Z0-9-]{4,30}", value):
-                    employee = value
-                    break
+            employee = ""
+            candidates = tagged[index + 1 : index + 3]
+            if candidates and candidates[0][0] in (":", "-"):
+                candidates = candidates[1:]
+            value = candidates[0][0].strip().upper() if candidates else ""
+            # The identity field alone is authoritative; never search payment dates.
+            if re.fullmatch(r"(?=.*[A-Z])(?=.*[0-9])[A-Z0-9-]{4,30}", value):
+                employee = value
         identity_at[index] = employee
     payments = []
     for n, start in enumerate(starts):

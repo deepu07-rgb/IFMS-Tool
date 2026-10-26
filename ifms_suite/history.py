@@ -87,9 +87,30 @@ def prepare_segments(start, end, allowance, rates, pay_history, payments, rule):
             if a > b:
                 raise ValueError("Invalid settlement period")
             if a <= end and b >= start:
-                previous.append(
-                    (a, b, money(heads[allowance]), p.get("bill_no", ""), p.get("id"))
-                )
+                parts = p.get("allocations_by_head", {}).get(allowance)
+                if not parts:
+                    if (a.year, a.month) != (b.year, b.month):
+                        raise ValueError(
+                            "Review monthly period allocations for prior bill "
+                            + str(p.get("bill_no", ""))
+                        )
+                    parts = [
+                        dict(start=str(a), end=str(b), amount=str(heads[allowance]))
+                    ]
+                for part in parts:
+                    x, y = date.fromisoformat(part["start"]), date.fromisoformat(
+                        part["end"]
+                    )
+                    if x <= end and y >= start:
+                        previous.append(
+                            (
+                                x,
+                                y,
+                                money(part["amount"]),
+                                p.get("bill_no", ""),
+                                p.get("id"),
+                            )
+                        )
     points = sorted(cuts)
     rows = []
     for a, stop in zip(points, points[1:]):
@@ -105,6 +126,13 @@ def prepare_segments(start, end, allowance, rates, pay_history, payments, rule):
         if len(drawn) != 1:
             raise ValueError("Missing or ambiguous reviewed drawn payment for " + month)
         p = drawn[0]
+        first_day = date(a.year, a.month, 1)
+        last_day = date(a.year, a.month, monthrange(a.year, a.month)[1])
+        partial = start > first_day or end < last_day
+        if partial and rule.get("uniform_drawn_reviewed") is not True:
+            raise ValueError(
+                "Review the drawn allocation for a partial month, or enter the actual period amount manually"
+            )
         heads = {str(k).upper(): v for k, v in p.get("allowances", {}).items()}
         if allowance not in heads:
             raise ValueError(
@@ -135,6 +163,8 @@ def prepare_segments(start, end, allowance, rates, pay_history, payments, rule):
             rounding_scope=rule.get("rounding_scope", "segment"),
             prior_settlement="0.00",
         )
+        if partial:
+            row["source"] += "; reviewed uniform calendar-day drawn allocation"
         if row["basis"] == "basic_da":
             da = active(
                 [
@@ -175,6 +205,13 @@ def prepare_segments(start, end, allowance, rates, pay_history, payments, rule):
             for r in eligible
         )
         target = rounded(amount * selected_days / total_days)
+        if (
+            selected_days != total_days
+            and rule.get("uniform_drawn_reviewed") is not True
+        ):
+            raise ValueError(
+                "Review the drawn allocation of a prior settlement for these partial dates"
+            )
         allocated = Decimal(0)
         for index, r in enumerate(eligible):
             days = (

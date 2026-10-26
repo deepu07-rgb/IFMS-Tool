@@ -71,6 +71,7 @@
         flex-direction: column;
         gap: 6px;
         margin: 8px 14px 8px 0;
+        max-width: 100%;
       }
       input,
       select,
@@ -82,6 +83,7 @@
       select,
       textarea {
         padding: 10px;
+        max-width: 100%;
         border: 1px solid #b9cbce;
         border-radius: 6px;
       }
@@ -140,8 +142,11 @@
       }
       .grid {
         display: grid;
-        grid-template-columns: 2fr 1fr;
+        grid-template-columns: minmax(0, 1fr) 290px;
         gap: 20px;
+      }
+      .grid > * {
+        min-width: 0;
       }
       @media (max-width: 800px) {
         aside {
@@ -387,7 +392,9 @@
                 ><label
                   >Proration<select id="claimProration">
                     <option value="calendar">Actual calendar days</option>
-                    <option value="thirty">30-day rule (verify order)</option>
+                    <option value="thirty">
+                      30-day service month (verify order)
+                    </option>
                   </select></label
                 ><label
                   >Rounding<select id="claimRounding">
@@ -423,10 +430,18 @@
                     </option>
                   </select></label
                 >
+                <label
+                  ><span
+                    >For partial months: I verified uniform calendar-day
+                    allocation of the monthly drawn/prior amounts. Use actual
+                    period amounts in manual mode if pay varied during the
+                    month.</span
+                  ><input type="checkbox" name="uniform_drawn_reviewed"
+                /></label>
                 <p>
                   Add a row at each pay or rate change. Drawn rates must be
-                  confirmed from payment records. All figures use percentage of
-                  basic.
+                  confirmed from payment records. Amounts follow the selected
+                  calculation basis and rounding policy.
                 </p>
                 <div class="scroll">
                   <table>
@@ -440,6 +455,7 @@
                         <th>Prior settlement</th>
                         <th>Due DA % (HDA basis)</th>
                         <th>Drawn DA %</th>
+                        <th>Linked prior payment IDs (comma-separated)</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -461,8 +477,9 @@
           <div class="card">
             <h2>Applicable rates</h2>
             <p class="muted">
-              Library entries are manually supplied. Select and verify the
-              correct effective dates; rates are not silently applied.
+              History mode uses dated library rates automatically. Check the
+              official or manual source and applicable category. Manual periods
+              use the rates or amounts entered in each row.
             </p>
             <div id="rateReference"></div>
           </div>
@@ -485,7 +502,7 @@
             ><label
               >Proration<select name="proration">
                 <option value="calendar">Calendar days</option>
-                <option value="thirty">Prescribed 30-day rule</option>
+                <option value="thirty">30-day service month</option>
               </select></label
             ><label
               >Rounding<select name="rounding">

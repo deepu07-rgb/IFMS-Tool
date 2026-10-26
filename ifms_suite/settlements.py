@@ -4,12 +4,61 @@ import json
 from datetime import date
 from flask import request, jsonify
 from .storage import database
-from .payroll import identity, reviewed_payment, payment_records
+from .payroll import (
+    identity,
+    reviewed_payment,
+    payment_records,
+    validate_period_allocations,
+)
 from .calculation import money
 from .payment_types import entitlement_type, payment_class
 
 
 def register_settlements(suite):
+    @suite.post("/api/payments/<int:id>/period_allocations")
+    def review_monthly_allocations(id):
+        p = request.get_json() or {}
+        if p.get("reviewed") is not True or not p.get("reference"):
+            raise ValueError(
+                "Review monthly arrear amounts against the source and give its reference"
+            )
+        with database() as db:
+            db.execute("BEGIN IMMEDIATE")
+            r = db.execute("SELECT * FROM suite_payments WHERE id=?", (id,)).fetchone()
+            if not r:
+                return jsonify(error="Payment not found"), 404
+            q = next(
+                row
+                for row in payment_records(db, r["employee_code"])
+                if row["id"] == id
+            )
+            head = identity(p.get("head"))
+            if payment_class(q) != "allowance_arrear":
+                raise ValueError(
+                    "Monthly arrear allocations require an allowance-arrear bill"
+                )
+            if head in q.get("allocations_by_head", {}):
+                raise ValueError(
+                    "This allowance already has reviewed or saved-claim allocations"
+                )
+            allocations = validate_period_allocations(q, {head: p.get("rows")})
+            existing = db.execute(
+                "SELECT payload FROM suite_payment_allocations WHERE payment_id=?",
+                (id,),
+            ).fetchone()
+            payload = (
+                json.loads(existing["payload"])
+                if existing
+                else dict(period=q["entitlement_period"])
+            )
+            payload.setdefault("allocations_by_head", {}).update(allocations)
+            payload.setdefault("allocation_references", {})[head] = p["reference"]
+            db.execute(
+                "INSERT INTO suite_payment_allocations(payment_id,payload) VALUES(?,?) ON CONFLICT(payment_id) DO UPDATE SET payload=excluded.payload",
+                (id, json.dumps(payload)),
+            )
+        return jsonify(status="allocated")
+
     @suite.post("/api/payments/<int:id>/allocate")
     def allocate(id):
         p = request.get_json() or {}

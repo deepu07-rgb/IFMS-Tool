@@ -1,7 +1,7 @@
 """Reviewed histories, reusable rules and batch preparation services."""
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from flask import request, jsonify
 from .storage import database
 from .calculation import money, rounded, calculate_claim
@@ -73,6 +73,10 @@ def reviewed_payment(db, p, import_id=0):
             raise ValueError("Invalid entitlement period")
         p["entitlement_period"] = {"start": str(a), "end": str(b)}
     p["employee_code"] = code
+    if p.get("allocations_by_head"):
+        p["allocations_by_head"] = validate_period_allocations(
+            p, p["allocations_by_head"]
+        )
     for r in db.execute(
         "SELECT payload FROM suite_payments WHERE employee_code=?", (code,)
     ):
@@ -87,6 +91,54 @@ def reviewed_payment(db, p, import_id=0):
         (import_id, code, json.dumps(p, sort_keys=True)),
     ).lastrowid
     return id
+
+
+def validate_period_allocations(payment, allocations):
+    period = payment.get("entitlement_period")
+    if not period or not isinstance(allocations, dict):
+        raise ValueError(
+            "Assign the entitlement period before reviewing monthly amounts"
+        )
+    result = {}
+    for head, parts in allocations.items():
+        head = identity(head)
+        if (
+            head not in payment.get("allowances", {})
+            or not isinstance(parts, list)
+            or not parts
+            or len(parts) > 1200
+        ):
+            raise ValueError(
+                "Choose an allowance on this bill and up to 1200 allocation rows"
+            )
+        normalized = []
+        total = money("0")
+        cursor = date.fromisoformat(period["start"])
+        for part in sorted(parts, key=lambda r: r["start"]):
+            a, b = date.fromisoformat(part["start"]), date.fromisoformat(part["end"])
+            amount = money(part["amount"])
+            if (
+                a != cursor
+                or a > b
+                or b > date.fromisoformat(period["end"])
+                or (a.year, a.month) != (b.year, b.month)
+            ):
+                raise ValueError(
+                    "Monthly allocation rows must cover the entitlement period without gaps or overlaps"
+                )
+            if amount != rounded(amount):
+                raise ValueError("Allocation amounts may have at most two decimals")
+            normalized.append(dict(start=str(a), end=str(b), amount=f"{amount:.2f}"))
+            total += amount
+            cursor = b + timedelta(days=1)
+        if cursor != date.fromisoformat(period["end"]) + timedelta(
+            days=1
+        ) or total != money(payment["allowances"][head]):
+            raise ValueError(
+                "Allocation dates and amounts must reconcile with the original bill"
+            )
+        result[head] = normalized
+    return result
 
 
 def payment_records(db, code):
@@ -105,7 +157,20 @@ def payment_records(db, code):
             (r["id"],),
         ).fetchone()
         if a:
-            p["entitlement_period"] = json.loads(a["payload"])["period"]
+            allocation = json.loads(a["payload"])
+            p["entitlement_period"] = allocation["period"]
+            p["allocations_by_head"] = allocation.get("allocations_by_head", {})
+        linked = db.execute(
+            "SELECT c.payload,c.calculation FROM suite_claim_settlements s JOIN suite_claims c ON c.id=s.claim_id WHERE s.payment_id=?",
+            (r["id"],),
+        ).fetchone()
+        if linked:
+            claim = json.loads(linked["payload"])
+            calculation = json.loads(linked["calculation"])
+            p.setdefault("allocations_by_head", {})[claim["allowance"]] = [
+                dict(start=row["start"], end=row["end"], amount=row["difference"])
+                for row in calculation["rows"]
+            ]
         rows.append(p)
     return rows
 
@@ -137,6 +202,7 @@ def history_segments(db, p):
     ]
     rule["da_rates"] = rates
     rule["entitlement_type"] = p.get("entitlement_type", "salary")
+    rule["uniform_drawn_reviewed"] = p.get("uniform_drawn_reviewed") is True
     pay = [
         json.loads(r["payload"])
         for r in db.execute(
@@ -160,6 +226,8 @@ def calculate_payload(db, p):
             p[key] = employee.get(key, "")
     if p.get("source") == "history":
         p["segments"] = history_segments(db, p)
+    else:
+        validate_manual_settlements(db, p)
     deductions = list(p.get("deductions") or [])
     if p.get("allocation_policy") == "source_order":
         if p.get("source") != "history" or identity(p.get("allowance")) != "DA":
@@ -188,6 +256,80 @@ def calculate_payload(db, p):
                 deferred += max(money(row["difference"]), money("0"))
         deductions.insert(0, dict(name=scheme, mode="fixed", value=str(deferred)))
     return calculate_claim(p["start"], p["end"], p["segments"], deductions)
+
+
+def validate_manual_settlements(db, p):
+    """IDs alone cannot authorize an overlapping revision or invented deduction."""
+    from .payment_types import payment_class
+
+    payments = {r["id"]: r for r in payment_records(db, p.get("employee_code", ""))}
+    consumed = set()
+    referenced = set()
+    for segment in p.get("segments", []):
+        ids = segment.get("settlement_ids", [])
+        if not ids:
+            continue
+        if not isinstance(ids, list) or len(ids) != len(set(ids)):
+            raise ValueError("List each linked settlement once per segment")
+        expected = money("0")
+        for pid in ids:
+            referenced.add(pid)
+            payment = payments.get(pid)
+            if (
+                not payment
+                or payment_class(payment) != "allowance_arrear"
+                or entitlement_type(payment) != p.get("entitlement_type", "salary")
+            ):
+                raise ValueError(
+                    "Settlement employee, category or entitlement does not match"
+                )
+            if not db.execute(
+                "SELECT 1 FROM suite_claim_settlements s JOIN suite_claims c ON c.id=s.claim_id WHERE s.payment_id=? AND c.status='paid'",
+                (pid,),
+            ).fetchone():
+                raise ValueError(
+                    "Manual revision requires an actual settlement linked to a paid claim"
+                )
+            parts = payment.get("allocations_by_head", {}).get(
+                identity(p.get("allowance")), []
+            )
+            matched = False
+            for index, part in enumerate(parts):
+                if part["start"] <= segment["end"] and segment["start"] <= part["end"]:
+                    if not (
+                        segment["start"] <= part["start"]
+                        and part["end"] <= segment["end"]
+                    ):
+                        raise ValueError(
+                            "Align manual revision periods with the saved settlement slices"
+                        )
+                    if (pid, index) in consumed:
+                        raise ValueError("Settlement slice was deducted more than once")
+                    consumed.add((pid, index))
+                    expected += money(part["amount"])
+                    matched = True
+            if not matched:
+                raise ValueError(
+                    "Settlement allowance or covered dates do not match this segment"
+                )
+        if rounded(money(segment.get("prior_settlement", "0"))) != rounded(expected):
+            raise ValueError(
+                "Prior settlement amount differs from linked saved allocations"
+            )
+    for pid in referenced:
+        for index, part in enumerate(
+            payments[pid]
+            .get("allocations_by_head", {})
+            .get(identity(p.get("allowance")), [])
+        ):
+            if (
+                part["start"] <= p["end"]
+                and p["start"] <= part["end"]
+                and (pid, index) not in consumed
+            ):
+                raise ValueError(
+                    "Deduct every saved settlement slice covered by this revision"
+                )
 
 
 def register_payroll(suite):
