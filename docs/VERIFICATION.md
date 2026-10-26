@@ -2,7 +2,7 @@
 
 Source/browser checks on 26 October 2026:
 
-- Active engine/workspace regression: `python -m pytest --ignore=tests/test_expected_totals.py -q` — 132 passed, 14 skipped before the final mixed-scan OCR regression; final count recorded in the implementation ledger.
+- Active engine/workspace regression: `python -m pytest --ignore=tests/test_expected_totals.py -q` — 133 passed, 14 skipped, including the mixed scanned-page/digital-header OCR regression.
 - Real Chromium acceptance passed employee/pay-history entry, reviewed drawn history, history-based DA/GPF claim, finalization, Excel export, actual settlement, digital GA55 identity and printed totals, uploaded workbook recalculation, fixed custom allowance and complete backup.
 - Browser acceptance blocked external HTTP/HTTPS requests; no external requests or JavaScript errors occurred. Chromium's built-in PDF-viewer resources are local and allowed.
 - Original supplied source regression fixtures are restored from the Inner archive for tests and are never included in the portable package.
