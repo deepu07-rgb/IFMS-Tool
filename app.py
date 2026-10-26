@@ -2769,7 +2769,7 @@ def _send_export_file(path):
         io.BytesIO(path.read_bytes()),
         as_attachment=True,
         download_name=path.name,
-        mimetype='application/octet-stream',
+        mimetype=('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' if path.suffix.lower() == '.xlsx' else 'application/octet-stream'),
     )
 
 
@@ -4500,7 +4500,7 @@ def pdf_audit_export():
     safe_source = re.sub(r'[^A-Za-z0-9_.-]+', '_', audit['source_file'] or f"bill_{bill_id}")
     path = os.path.join(app.config['EXPORT_FOLDER'], f"PDF_Audit_{safe_source}_{timestamp}.xlsx")
     _write_workbook(path, sheets)
-    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route('/api/v3/manual_qa_export', methods=['POST'])
@@ -4543,7 +4543,7 @@ def manual_qa_export():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     path = os.path.join(app.config['EXPORT_FOLDER'], f"Manual_QA_Export_{timestamp}.xlsx")
     _write_workbook(path, sheets)
-    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 
@@ -5031,7 +5031,7 @@ def export_excel():
                             for cell in row:
                                 cell.fill = PatternFill('solid', fgColor='D9EAD3')
 
-    return send_file(fpath, as_attachment=True, download_name=fname)
+    return send_file(fpath, as_attachment=True, download_name=fname, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 
@@ -5668,7 +5668,7 @@ def v3_schedules_unmapped_components_export():
                         if isinstance(cell.value, (int, float)):
                             cell.number_format = '#,##,##0.00'
 
-    return send_file(fpath, as_attachment=True, download_name=fname)
+    return send_file(fpath, as_attachment=True, download_name=fname, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route('/api/v3/schedules/export', methods=['POST'])
@@ -5750,7 +5750,7 @@ def v3_schedules_export():
                         if isinstance(cell.value, (int, float)):
                             cell.number_format = '#,##,##0.00'
 
-    return send_file(fpath, as_attachment=True, download_name=fname)
+    return send_file(fpath, as_attachment=True, download_name=fname, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route('/api/schedule_stats')
@@ -6166,7 +6166,7 @@ def schedule_export():
                 max_len = max(len(str(cell.value or '')) for cell in col)
                 ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 30)
     
-    return send_file(fpath, as_attachment=True, download_name=fname)
+    return send_file(fpath, as_attachment=True, download_name=fname, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ===================== DELETE APIs =====================
 
