@@ -42,7 +42,9 @@ jobs:
                   z.extract(path=td,targets=names)
               shutil.copytree(Path(td)/'IFMS Inner Sheet Analyzer'/'test_fixtures','test_fixtures',dirs_exist_ok=True)
       - name: Active engine and workspace regression gate
-        run: python packaging/run_checked.py Regression -- python -m pytest --ignore=tests/test_expected_totals.py -q
+        run: |
+          $env:PATH = "C:\Program Files\Tesseract-OCR;" + $env:PATH
+          python packaging/run_checked.py Regression -- python -m pytest --ignore=tests/test_expected_totals.py -q
       - name: Record inherited legacy parser results separately
         continue-on-error: true
         run: python -m pytest tests/test_expected_totals.py -q

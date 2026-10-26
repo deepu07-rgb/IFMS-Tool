@@ -71,6 +71,33 @@ def main():
                 assert json.loads(req("/api/v3/health_check"))["database_integrity"][
                     "ok"
                 ]
+                increment = json.loads(
+                    req(
+                        "/suite/api/increment_check",
+                        dict(
+                            employee_code="INCREMENT-SMOKE",
+                            start="2026-07-01",
+                            end="2026-07-31",
+                            new_basic="55500",
+                            category="Y",
+                            reviewed=True,
+                            pay_order_reference="Synthetic reviewed increment",
+                            drawn_reference="Synthetic reviewed GA55",
+                            drawn={
+                                "BASIC": "53900",
+                                "DA": "32340",
+                                "HRA": "10780",
+                                "HDA": "7187",
+                            },
+                            hda_rule={
+                                "numerator": "1",
+                                "denominator": "12",
+                                "reference": "Synthetic reviewed fraction",
+                            },
+                        ),
+                    )
+                )
+                assert increment["total"] == "3093.00", increment
                 # OCR resources are checked through the actual executable environment.
                 status = json.loads(req("/suite/api/ocr_status"))
                 if sys.platform == "win32":

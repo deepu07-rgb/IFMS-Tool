@@ -247,6 +247,38 @@ def finalize(id):
             from .payroll import validate_manual_settlements
 
             validate_manual_settlements(db, payload)
+        if payload.get("source") == "reviewed_increment":
+            from .increments import guard_prior_increment
+
+            guard_prior_increment(
+                db,
+                payload["employee_code"],
+                payload["start"],
+                payload["end"],
+                payload.get("increment_heads", [payload["allowance"]]),
+            )
+            from .history import active
+            from datetime import date
+
+            current_rates = [
+                json.loads(r["payload"])
+                for r in db.execute("SELECT payload FROM suite_rates")
+            ]
+            for head, saved in payload.get("rate_snapshot", {}).items():
+                current = active(
+                    [
+                        r
+                        for r in current_rates
+                        if r["allowance"].upper() == head
+                        and r.get("category", "") == saved.get("category", "")
+                    ],
+                    date.fromisoformat(payload["start"]),
+                    head + " rate",
+                )
+                if current != saved:
+                    raise ValueError(
+                        "Library rates changed; recheck the increment before finalizing"
+                    )
         for other in db.execute(
             "SELECT * FROM suite_claims WHERE status IN ('finalized','paid')"
         ):
@@ -477,6 +509,13 @@ def ocr_import(id):
         payload["ocr_used"] = True
         if payload["kind"] == "ga55":
             payload["ga55"] = parse_ga55(pages)
+            if not payload["ga55"]["payments"]:
+                from .ga55_table_ocr import parse_scanned_ga55_tables
+
+                candidate = parse_scanned_ga55_tables(derivative)
+                if candidate["payments"]:
+                    payload["ga55"] = candidate
+
         if payload["kind"] == "due_drawn":
             from .due_drawn import parse_pdf_tables
 
@@ -524,7 +563,7 @@ def review_import(id):
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
-            "SELECT status FROM suite_imports WHERE id=?", (id,)
+            "SELECT status,payload FROM suite_imports WHERE id=?", (id,)
         ).fetchone()
         if not row:
             return jsonify(error="Import not found"), 404
@@ -534,6 +573,20 @@ def review_import(id):
             )
         from .payroll import reviewed_payment
 
+        column_ocr = (
+            json.loads(row["payload"]).get("ga55", {}).get("layout")
+            == "GA55 A column OCR"
+        )
+        if column_ocr and any(
+            any(
+                payment.get(k) in (None, "")
+                for k in ("printed_gross", "printed_deductions", "printed_net")
+            )
+            for payment in payments
+        ):
+            raise ValueError(
+                "Column OCR requires source-checked printed gross, deductions and net before payment approval"
+            )
         for payment in payments:
             payment = dict(
                 payment,
@@ -562,6 +615,10 @@ register_analyzer_bridge(suite)
 from .document_exports import register_document_exports
 
 register_document_exports(suite)
+
+from .increments import register_increments
+
+register_increments(suite)
 
 from .statements import register_statements
 

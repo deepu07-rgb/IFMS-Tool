@@ -484,6 +484,124 @@
             <div id="rateReference"></div>
           </div>
         </div>
+        <div class="card">
+          <h2>Increment due–drawn checker</h2>
+          <p>
+            Check a full monthly increment after reviewing the GA55 and pay
+            order. DA and HRA use the dated library; HDA uses your confirmed
+            fraction of Basic plus DA. Missing drawn figures must be checked,
+            not assumed zero. For partial months use the dated-period maker
+            above.
+          </p>
+          <form id="incrementForm">
+            <label
+              >Employee code<input
+                name="employee_code"
+                list="employeeOptions"
+                required
+            /></label>
+            <label
+              >Salary month<input name="month" type="month" required
+            /></label>
+            <label
+              >Approved new basic<input
+                name="new_basic"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+            /></label>
+            <label
+              >HRA category<select name="category" required>
+                <option value="">Select applicable category</option>
+                <option>Y</option>
+                <option>Z</option>
+              </select></label
+            >
+            <label
+              >Actual drawn Basic<input
+                name="drawn_BASIC"
+                type="number"
+                step="0.01"
+                required
+            /></label>
+            <label
+              >Actual drawn DA<input
+                name="drawn_DA"
+                type="number"
+                step="0.01"
+                required
+            /></label>
+            <label
+              >Actual drawn HRA<input
+                name="drawn_HRA"
+                type="number"
+                step="0.01"
+                required
+            /></label>
+            <label
+              >Actual drawn HDA<input
+                name="drawn_HDA"
+                type="number"
+                step="0.01"
+                required
+            /></label>
+            <label
+              >HDA fraction numerator<input
+                name="hda_numerator"
+                type="number"
+                value="1"
+                min="0.000001"
+                step="any"
+                required
+            /></label>
+            <label
+              >HDA fraction denominator<input
+                name="hda_denominator"
+                type="number"
+                value="12"
+                min="0.000001"
+                step="any"
+                required
+            /></label>
+            <label
+              >HDA rule / source reference<input name="hda_reference" required
+            /></label>
+            <label
+              >Other unchanged allowances total<input
+                name="unchanged_total"
+                type="number"
+                step="0.01"
+                required
+            /></label>
+            <label
+              >Printed GA55 drawn gross (optional)<input
+                name="printed_drawn_gross"
+                type="number"
+                step="0.01"
+            /></label>
+            <label
+              >Increment order / effective-date reference<input
+                name="pay_order_reference"
+                required
+            /></label>
+            <label
+              >Drawn bill / source reference<input
+                name="drawn_reference"
+                required
+            /></label>
+            <label
+              ><span
+                >I checked identity, effective date, all drawn amounts, HRA
+                eligibility and HDA fraction</span
+              ><input name="reviewed" type="checkbox" required
+            /></label>
+            <button class="action">
+              Check increment &amp; save component drafts
+            </button>
+          </form>
+          <div id="incrementResult"></div>
+        </div>
       </section>
       <section id="rates">
         <h1>Rates & Allowance Library</h1>

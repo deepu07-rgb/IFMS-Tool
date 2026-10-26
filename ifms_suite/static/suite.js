@@ -757,7 +757,7 @@ $("inspectEmployee").onsubmit = async (e) => {
                 amount,
               })),
               ["head", "amount"],
-            )}<p>Entitlement period: ${escapeHTML(p.entitlement_period?.start || "not assigned")} — ${escapeHTML(p.entitlement_period?.end || "")}</p>${!p.entitlement_period && p.bill_type.toLowerCase() !== "regular salary" ? `<form data-allocation="${p.id}"><label>Entitlement from<input type="date" name="start" required></label><label>Through<input type="date" name="end" required></label><label>Sanction / source reference<input name="reference" required></label><label><span>Period checked against source</span><input name="reviewed" type="checkbox" required></label><button class="action">Assign arrear period</button></form>` : ""}${monthlyAllocationForm(p)}</details>`,
+            )}<p>Entitlement period: ${escapeHTML(p.entitlement_period?.start || "not assigned")} — ${escapeHTML(p.entitlement_period?.end || "")}</p>${!p.entitlement_period && p.bill_type.toLowerCase() !== "regular salary" ? `<form data-allocation="${p.id}"><label>Entitlement from<input type="date" name="start" required></label><label>Through<input type="date" name="end" required></label><label>Sanction / source reference<input name="reference" required></label><label><span>Period checked against source</span><input name="reviewed" type="checkbox" required></label><button class="action">Assign arrear period</button></form>` : ""}${monthlyAllocationForm(p)}${p.payment_class === "regular_salary" ? `<button class="action" data-increment-payment="${p.id}">Use for increment check</button>` : ""}</details>`,
         )
         .join("");
   } catch (x) {
@@ -953,3 +953,72 @@ function monthlyAllocationForm(p) {
     `<form data-monthly-allocation="${p.id}"><h4>Review monthly arrear amounts</h4><label>Allowance<select name="head">${heads.map((h) => `<option>${escapeHTML(h)}</option>`).join("")}</select></label><p>Enter the amounts in the original monthly statement. Dates and total must reconcile with this bill. Saved allocations cannot be overwritten.</p><div class="scroll"><table><thead><tr><th>From</th><th>Through</th><th>Actual arrear paid</th></tr></thead><tbody>${rows.join("")}</tbody></table></div><label>Source reference<input name="reference" required></label><label><span>Monthly amounts checked</span><input name="reviewed" type="checkbox" required></label><button class="action">Save reviewed monthly amounts</button></form>`
   );
 }
+
+$("employeeHistory").onclick = async (e) => {
+  const button = e.target.closest("[data-increment-payment]");
+  if (!button) return;
+  try {
+    const code = $("inspectEmployee").elements.employee_code.value;
+    const payments = await api(
+      "payments?employee_code=" + encodeURIComponent(code),
+    );
+    const payment = payments.find(
+      (p) => p.id === Number(button.dataset.incrementPayment),
+    );
+    const f = $("incrementForm"),
+      heads = Object.fromEntries(
+        Object.entries(payment.allowances).map(([k, v]) => [
+          k.toUpperCase(),
+          v,
+        ]),
+      );
+    f.elements.employee_code.value = code;
+    f.elements.month.value = payment.pay_month;
+    for (const head of ["BASIC", "DA", "HRA", "HDA"])
+      f.elements["drawn_" + head].value = heads[head] ?? "";
+    f.elements.unchanged_total.value = Object.entries(heads)
+      .filter(([k]) => !["BASIC", "DA", "HRA", "HDA"].includes(k))
+      .reduce((total, [k, v]) => total + Number(v), 0)
+      .toFixed(2);
+    f.elements.printed_drawn_gross.value = payment.printed_gross || "";
+    f.elements.drawn_reference.value =
+      payment.bill_no + " / " + payment.reference;
+    f.elements.new_basic.value = "";
+    f.elements.reviewed.checked = false;
+    openModule("arrears");
+    f.scrollIntoView({ behavior: "smooth" });
+  } catch (error) {
+    notify(error.message);
+  }
+};
+$("incrementForm").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const f = e.target,
+      p = Object.fromEntries(new FormData(f));
+    const [year, month] = p.month.split("-").map(Number);
+    p.start = p.month + "-01";
+    p.end = p.month + "-" + new Date(Date.UTC(year, month, 0)).getUTCDate();
+    p.reviewed = f.elements.reviewed.checked;
+    p.drawn = {};
+    for (const head of ["BASIC", "DA", "HRA", "HDA"])
+      p.drawn[head] = p["drawn_" + head];
+    p.hda_rule = {
+      numerator: p.hda_numerator,
+      denominator: p.hda_denominator,
+      reference: p.hda_reference,
+    };
+    p.unchanged_allowances = {
+      "Other unchanged allowances": p.unchanged_total,
+    };
+    const result = await post("increment_check", p);
+    $("incrementResult").innerHTML =
+      `<h3>Increment difference INR ${escapeHTML(result.total)}</h3>${table(result.components, ["head", "due", "drawn", "difference", "formula", "reference"])}<p>Selected-head subtotal: due ${escapeHTML(result.selected_due)}, drawn ${escapeHTML(result.selected_drawn)}. Including unchanged allowances: due ${escapeHTML(result.full_due_gross)}, drawn ${escapeHTML(result.full_drawn_gross)}.</p><p>${escapeHTML(result.warnings.join("; "))}</p><a class="action" href="/suite/api/batch_export?ids=${result.claim_ids.join(",")}">Download PDF/Excel component pack</a><p>Drafts saved in Reports for review and finalization.</p>`;
+    notify(
+      "Increment checked using the dated library; review component drafts",
+    );
+    await refresh();
+  } catch (error) {
+    notify(error.message);
+  }
+};
