@@ -164,9 +164,17 @@ def parse_ga55(pages):
         payments.append(record)
     return {
         "payments": payments,
+        "extraction_status": (
+            "candidates_require_review" if payments else "unreadable_or_unsupported"
+        ),
+        "calculation_ready": False,
         "requires_review": True,
         "layout": "GA55 text sequence",
-        "notice": "Candidate payment records; verify before use. No entitlement periods inferred from payment months.",
+        "notice": (
+            "Candidate payment records; verify before use. No entitlement periods inferred from payment months."
+            if payments
+            else "No payment rows could be read reliably. This does not mean zero arrears. Review the original scan and enter actual amounts; automatic calculation is unavailable for this extraction."
+        ),
     }
 
 

@@ -481,8 +481,9 @@ def ocr_import(id):
             from .due_drawn import parse_pdf_tables
 
             payload["statement_rows"] = parse_pdf_tables(derivative)
-        payload["notice"] = (
-            "OCR output requires source review, including digits, signs and dates."
+        payload["notice"] = payload.get("ga55", {}).get(
+            "notice",
+            "OCR output requires source review, including digits, signs and dates.",
         )
         db.execute(
             "UPDATE suite_imports SET payload=?,status='needs_review' WHERE id=?",
