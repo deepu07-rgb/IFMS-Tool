@@ -5,7 +5,7 @@ from flask import request, jsonify
 from .storage import database
 from .payroll import identity
 from .history import active
-from .calculation import money, rounded, calculate_claim
+from .calculation import money, calculate_claim
 
 
 def register_statements(suite):
@@ -83,10 +83,9 @@ def register_statements(suite):
                         raise ValueError(
                             "Rate changes within this row; split the row at the effective date"
                         )
-                    due = rounded(
-                        money(r["due"]["Basic"]) * money(rate["rate"]) / 100,
-                        rate.get("rounding", "paise"),
-                    )
+                    # Keep the monthly entitlement unrounded until the shared
+                    # engine prorates it to the selected dates.
+                    due = money(r["due"]["Basic"]) * money(rate["rate"]) / 100
                     reference = rate["reference"] + " " + rate.get("order_date", "")
                 s = dict(
                     start=str(a),
@@ -94,6 +93,7 @@ def register_statements(suite):
                     basis="fixed",
                     due_amount=str(due),
                     drawn_amount=str(drawn),
+                    drawn_basis="monthly_amount",
                     source="Source import "
                     + str(source["id"])
                     + " / "
@@ -102,8 +102,12 @@ def register_statements(suite):
                     + str(r.get("source_row", "")),
                     rule_reference=reference,
                 )
+                if p["method"] == "rates":
+                    s["rounding"] = rate.get("rounding", "paise")
                 if p.get("amounts_cover_selected_period") is True:
-                    s.update(due_basis="period", drawn_basis="period")
+                    s["drawn_basis"] = "period"
+                    if p["method"] == "uploaded":
+                        s["due_basis"] = "period"
                 segments.append(s)
             if not segments:
                 raise ValueError("No rows selected in the chosen worksheet")

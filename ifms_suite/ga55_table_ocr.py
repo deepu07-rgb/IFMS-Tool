@@ -25,11 +25,15 @@ def is_ga55_header(text):
     salary = "FINANCIALYEAR" in compact and all(
         word in compact for word in ("HRA", "CCA", "HDA")
     )
+    # The Latin GA prefix is often read as Devanagari or punctuation.
+    # A numeric suffix alone is insufficient without independent form context.
+    numeric_form = "55A" in compact and "FINANCIALYEAR" in compact
     return (
         (form and government)
         or (table and (form or government))
         or (form and identity)
         or (government and salary)
+        or (numeric_form and (government or identity))
     )
 
 

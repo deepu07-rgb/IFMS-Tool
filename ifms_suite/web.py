@@ -234,6 +234,9 @@ def finalize(id):
         if row["status"] == "finalized":
             return jsonify(status="finalized")
         payload = json.loads(row["payload"])
+        from .payroll import guard_prior_arrears
+
+        guard_prior_arrears(db, payload)
         if payload.get("source") == "history":
             from .payroll import calculate_payload
 

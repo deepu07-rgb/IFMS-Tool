@@ -6,7 +6,7 @@ from flask import request, jsonify
 from .storage import database
 from .calculation import money, rounded, calculate_claim
 from .history import prepare_segments
-from .payment_types import classify_bill, entitlement_type
+from .payment_types import classify_bill, entitlement_type, payment_class
 
 
 def identity(value):
@@ -265,6 +265,45 @@ def calculate_payload(db, p):
                 deferred += max(money(row["difference"]), money("0"))
         deductions.insert(0, dict(name=scheme, mode="fixed", value=str(deferred)))
     return calculate_claim(p["start"], p["end"], p["segments"], deductions)
+
+
+def guard_prior_arrears(db, p):
+    """Require covered dates and explicit handling of relevant prior credits."""
+    linked = {
+        pid
+        for segment in p.get("segments", [])
+        for pid in segment.get("settlement_ids", [])
+    }
+    for payment in payment_records(db, identity(p.get("employee_code"))):
+        if payment_class(payment) in (
+            "regular_salary",
+            "leave_encashment",
+            "bonus",
+        ) or entitlement_type(payment) != p.get("entitlement_type", "salary"):
+            continue
+        if not any(
+            identity(head) == identity(p.get("allowance")) and money(amount) != 0
+            for head, amount in payment.get("allowances", {}).items()
+        ):
+            continue
+        period = payment.get("entitlement_period")
+        if not period:
+            raise ValueError(
+                "Confirm the covered entitlement period of prior arrear bill "
+                + str(payment.get("bill_no", ""))
+                + " before finalizing; its payment month does not establish non-overlap"
+            )
+        if (
+            period["start"] <= p["end"]
+            and p["start"] <= period["end"]
+            and p.get("source") != "history"
+            and payment["id"] not in linked
+        ):
+            raise ValueError(
+                "Overlapping prior arrear bill "
+                + str(payment.get("bill_no", ""))
+                + " must be deducted through reviewed history or linked settlement allocations before finalizing"
+            )
 
 
 def validate_manual_settlements(db, p):

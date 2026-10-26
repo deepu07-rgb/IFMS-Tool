@@ -210,3 +210,13 @@ def test_ocr_route_preserves_base_when_column_coverage_is_partial(
     assert len(response.json["ga55"]["payments"]) == 2
     if pages == 41:
         assert response.json["ga55"]["payments"] == [good, bad]
+
+
+def test_ga55_header_with_only_numeric_form_suffix_needs_other_evidence():
+    from ifms_suite.ga55_table_ocr import is_ga55_header
+
+    assert is_ga55_header("Government Of Rajasthan ५५55 A Financial Year 2025-26")
+    assert is_ga55_header("Government Of Rajasthan (355 A Financial Year 2025-26")
+    assert is_ga55_header("(555 A Financial Year 2026-27 Employee Name GPF Number")
+    assert not is_ga55_header("(555 A Employee Name GPF Number")
+    assert not is_ga55_header("55 A Financial Year 2026-27 Total Allowances")
