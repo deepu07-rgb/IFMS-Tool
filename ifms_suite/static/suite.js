@@ -984,6 +984,7 @@ $("employeeHistory").onclick = async (e) => {
     f.elements.drawn_reference.value =
       payment.bill_no + " / " + payment.reference;
     f.elements.new_basic.value = "";
+    f.elements.effective_from.value = "";
     f.elements.reviewed.checked = false;
     openModule("arrears");
     f.scrollIntoView({ behavior: "smooth" });

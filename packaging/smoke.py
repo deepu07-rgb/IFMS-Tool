@@ -76,6 +76,7 @@ def main():
                         "/suite/api/increment_check",
                         dict(
                             employee_code="INCREMENT-SMOKE",
+                            effective_from="2026-07-01",
                             start="2026-07-01",
                             end="2026-07-31",
                             new_basic="55500",

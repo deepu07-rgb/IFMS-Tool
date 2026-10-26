@@ -19,6 +19,7 @@ def setup(client):
         end="2026-07-31",
         new_basic="55500",
         category="Y",
+        effective_from="2026-07-01",
         pay_order_reference="Approved matrix increment effective01July",
         reviewed=True,
         drawn={"BASIC": "53900", "DA": "32340", "HRA": "10780", "HDA": "7187"},
@@ -165,3 +166,20 @@ def test_bounded_midmonth_rate_cannot_be_missed_between_equal_endpoints(client):
     )
     r = client.post("/suite/api/increment_check", json=p)
     assert r.status_code == 400
+
+
+def test_increment_cannot_be_claimed_before_approved_effective_date(client):
+    p = setup(client)
+    p.update(start="2026-06-01", end="2026-06-30", effective_from="2026-07-01")
+    r = client.post("/suite/api/increment_check", json=p)
+    assert r.status_code == 400
+
+
+def test_increment_exports_retain_the_basic_and_rate_basis(client):
+    p = setup(client)
+    r = client.post("/suite/api/increment_check", json=p)
+    saved = {row["id"]: row for row in client.get("/suite/api/claims").json}
+    for id in r.json["claim_ids"]:
+        assert saved[id]["calculation"]["rows"][0]["basic"] == "55500"
+        assert saved[id]["calculation"]["rows"][0]["drawn_basic"] == "53900"
+    assert saved[r.json["claim_ids"][1]]["calculation"]["rows"][0]["due_rate"] == "60"

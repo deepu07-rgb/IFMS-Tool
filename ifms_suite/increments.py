@@ -58,6 +58,7 @@ def register_increments(suite):
         if (
             p.get("reviewed") is not True
             or not p.get("pay_order_reference")
+            or not p.get("effective_from")
             or not identity(p.get("employee_code"))
         ):
             raise ValueError(
@@ -72,6 +73,11 @@ def register_increments(suite):
         ):
             raise ValueError(
                 "Check one full calendar month; use manual dated segments for a partial increment period"
+            )
+        effective = date.fromisoformat(p["effective_from"])
+        if a < effective:
+            raise ValueError(
+                "The increment is not effective for the whole selected month; use the dated-period workflow if it starts midmonth"
             )
         basic = money(p["new_basic"])
         if basic < 0:
@@ -143,6 +149,9 @@ def register_increments(suite):
                 raise ValueError(
                     "Drawn components plus unchanged heads do not match GA55 gross"
                 )
+            display_rates = {"BASIC": "100", "DA": str(da), "HRA": str(hra)}
+            if "HDA" in heads:
+                display_rates["HDA"] = f"{100*n/d:.6f}"
             components = []
             ids = []
             total = Decimal(0)
@@ -161,6 +170,9 @@ def register_increments(suite):
                     start=str(a),
                     end=str(b),
                     basis="fixed",
+                    basic=str(basic),
+                    drawn_basic=str(drawn["BASIC"]),
+                    due_rate=display_rates[head],
                     due_amount=str(due[head]),
                     drawn_amount=str(drawn[head]),
                     drawn_basis=(
@@ -197,6 +209,7 @@ def register_increments(suite):
                     segments=[segment],
                     rule_reference=reference,
                     pay_order_reference=p["pay_order_reference"],
+                    increment_effective_from=str(effective),
                     drawn_reference=p.get("drawn_reference", "Source-reviewed GA55"),
                     formula=formula[head],
                     rate_snapshot=selected,

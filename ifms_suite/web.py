@@ -248,6 +248,14 @@ def finalize(id):
 
             validate_manual_settlements(db, payload)
         if payload.get("source") == "reviewed_increment":
+            from datetime import date
+
+            if not payload.get("increment_effective_from") or date.fromisoformat(
+                payload["increment_effective_from"]
+            ) > date.fromisoformat(payload["start"]):
+                raise ValueError(
+                    "Recheck the increment and confirm its approved effective date before finalization"
+                )
             from .increments import guard_prior_increment
 
             guard_prior_increment(
