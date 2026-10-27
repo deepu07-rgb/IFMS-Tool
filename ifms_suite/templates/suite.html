@@ -317,6 +317,26 @@
             confirmed payment history.
           </p>
         </div>
+        <div class="card">
+          <h2>Filter extracted records</h2>
+          <form id="documentFilterForm">
+            <label>Document type<select name="kind" id="documentKindFilter"><option value="">All documents</option><option value="outer">Outer sheets</option><option value="ga55">GA55 records</option></select></label>
+            <label>Search file / bill<input name="search" type="search"></label>
+            <label>Employee code<input name="employee" type="search"></label>
+            <label>Bill type<input name="bill_type" type="search"></label>
+            <label>Month from<input name="month_from" type="month"></label>
+            <label>Month through<input name="month_to" type="month"></label>
+            <label>Amount to filter<select name="amount_field" id="documentAmountField"><option value="gross">Gross</option><option value="net">Net</option></select></label>
+            <label>At least<input name="minimum" type="number" step="0.01"></label>
+            <label>At most<input name="maximum" type="number" step="0.01"></label>
+            <button class="action">Apply filters</button><button type="button" id="clearDocumentFilters">Clear filters</button>
+          </form>
+          <p>GA55 months are pay months; outer-sheet months are bill dates. Unreviewed OCR remains a candidate.</p>
+          <div id="documentRecords"></div>
+          <a class="action" id="filteredDocumentPdf">Export filtered PDF</a>
+          <a class="action" id="filteredDocumentExcel">Export filtered Excel</a>
+        </div>
+        <h2>Source files and OCR tools</h2>
         <div id="importsList"></div>
         <div id="automaticHraResults" class="card" aria-live="polite"></div>
         <div class="card">

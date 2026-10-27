@@ -23,3 +23,9 @@ Handwritten candidates can be wrong despite high confidence. Uncertain or multi-
 The consolidated source workflow handles HRA, DA and sanctioned revised-basic arrears across months, with an explicitly supported HDA dependency when configured. It uses sanctioned pay values; it does not decide legal eligibility, unresolved suspension/court cases or unprovided promotion/MACP fixation values. The existing custom allowance/history maker remains available for other configured allowances. Unknown financial evidence remains a review dependency.
 
 The installed-size/Windows distribution check belongs to the later authorized bundling phase. No dependency or recognition model was added by these workflow repairs.
+
+## Filtering salary and document data
+
+Inner Sheet Employee Data supports its existing combined employee/search/component/amount filters. **Export Filtered PDF** and Excel use the same filter conditions. The PDF contains every matching employee and component, without page-size truncation.
+
+Outer Sheet and GA55 modules now have **Filter extracted records**: document type, filename/bill search, employee, bill type, month range and gross/net/named allowance or deduction amount range. Negative ranges are supported. GA55 dates are pay months; outer dates are bill dates. Filtered PDF/Excel contain exactly the matching records; the full original PDF and full extracted Excel remain separate downloads. Missing or unreadable amounts do not match a numeric zero filter.

@@ -137,6 +137,7 @@ class EmployeeParser:
             
             # Simple state machine to find [String] -> [Number]
             current_head_words = []
+            last_head_word = None
             for w in line_words:
                 text = w['text']
                 # Clean up commas in numbers
@@ -171,7 +172,15 @@ class EmployeeParser:
                         current_head_words = [] # Reset for next component on same line
                 else:
                     if text not in ['-', '0']:
+                        # Two deduction columns can share a baseline. A wrapped
+                        # label left behind in the previous column must not join
+                        # the next column's heading (e.g. Salary + SIP).
+                        if (current_head_words and last_head_word is not None
+                                and 'x1' in last_head_word
+                                and w['x0'] - last_head_word['x1'] > 30):
+                            current_head_words = []
                         current_head_words.append(text)
+                        last_head_word = w
                         
         return components
 

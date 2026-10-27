@@ -700,3 +700,6 @@ register_bill_routes(suite)
 
 from .statement_grid_routes import register_statement_grid_routes
 register_statement_grid_routes(suite)
+
+from .document_records import register_document_records
+register_document_records(suite)

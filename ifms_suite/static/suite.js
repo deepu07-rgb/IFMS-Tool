@@ -38,6 +38,9 @@ $("navigation").onclick = (e) => {
   else if (k === "outer" || k === "ga55") {
     openModule("imports");
     $("importForm").elements.kind.value = k === "outer" ? "outer" : "ga55";
+    $("documentFilterForm").reset();
+    $("documentKindFilter").value = k === "outer" ? "outer" : "ga55";
+    document.querySelector('#imports h1').textContent = k === 'outer' ? 'Outer Sheet Analyzer' : 'GA55 / OCR';
   } else openModule(k);
 };
 function notify(text) {
@@ -76,6 +79,9 @@ function openModule(id) {
 }
 function openLegacy(tab) {
   openModule("legacy");
+  $("legacyTitle").textContent = ({schedules:"Schedules & Comparison",backup:"Backup & Restore",exportcenter:"Export Centre"})[tab] || "Inner Sheet Analyzer";
+  const module = tab === "schedules" ? "schedules" : ["backup","exportcenter"].includes(tab) ? "reports" : "inner";
+  document.querySelectorAll("#navigation button").forEach(b=>b.classList.toggle("active",b.dataset.module===module));
   $("legacyFrame").src = "/analyzer#" + tab;
 }
 function addSegment(s = {}) {
@@ -579,8 +585,8 @@ $("groupReviews").onsubmit = async (e) => {
 };
 async function refresh() {
   const version = ++refreshVersion;
-  const [employees, rates, claims, imports, groups, rules] = await Promise.all(
-    ["employees", "rates", "claims", "imports", "group_imports", "rules"].map(
+  const [employees, rates, claims, imports, groups, rules, completeBills] = await Promise.all(
+    ["employees", "rates", "claims", "imports", "group_imports", "rules", "bills"].map(
       (k) => api(k),
     ),
   );
@@ -590,7 +596,7 @@ async function refresh() {
   importRecords = imports;
   groupRecords = groups;
   $("summary").textContent =
-    `${employees.length} library employees · ${claims.length} statements · ${imports.length} documents`;
+    `${employees.length} library employees · ${claims.length} component statements · ${completeBills.length} consolidated bills · ${imports.length} documents`;
   $("employeeOptions").innerHTML = employees
     .map(
       (e) =>
@@ -632,9 +638,10 @@ async function refresh() {
   ]);
   renderRateReference();
   $("importsList").innerHTML = imports
+    .filter(i => !$("documentKindFilter").value || i.payload.kind === $("documentKindFilter").value)
     .map(
       (i) =>
-        `<div class="card"><h2>${escapeHTML(i.filename)}</h2><p>${escapeHTML(i.status)} · ${escapeHTML(i.payload.notice || "Review source before using amounts")}</p><a class="action" target="_blank" rel="noopener" href="/suite/api/imports/${i.id}/source">View source</a><a class="action" href="/suite/api/imports/${i.id}/pdf">PDF export</a><a class="action" href="/suite/api/imports/${i.id}/excel">Excel export</a>${i.status !== "reviewed" ? `<button class="action" data-review-import="${i.id}">${i.payload.kind === "due_drawn" ? "Check / recalculate statement" : "Review / enter payments"}</button>${i.payload.scan_pages?.length ? `<button class="action" data-ocr="${i.id}">Run local OCR</button>` : ""}` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-complete-bill="${i.id}">Prepare complete bill</button>` : ""}${i.payload.file_kind === "pdf" && i.status !== "reviewed" ? `<button class="action" data-evidence="${i.id}">Review unresolved source fields</button>` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-automatic-hra="${i.id}">Build HRA draft from PDF</button>` : ""}${i.payload.extracted ? outerSummary(i.payload.extracted) : ""}<p>${i.payload.ga55?.payments.length ?? 0} candidate payment entries</p><details><summary>Source text (${i.payload.pages.length} pages)</summary>${i.payload.pages.map((t, n) => `<h3>Page ${n + 1}</h3><pre>${escapeHTML(t || "No selectable text")}</pre>`).join("")}</details></div>`,
+        `<div class="card"><h2>${escapeHTML(i.filename)}</h2><p>${escapeHTML(i.status)} · ${escapeHTML(i.payload.notice || "Review source before using amounts")}</p><a class="action" target="_blank" rel="noopener" href="/suite/api/imports/${i.id}/source">View source</a><a class="action" href="/suite/api/imports/${i.id}/pdf">Original PDF</a><a class="action" href="/suite/api/imports/${i.id}/excel">Full Excel</a>${i.status !== "reviewed" ? `<button class="action" data-review-import="${i.id}">${i.payload.kind === "due_drawn" ? "Check / recalculate statement" : "Review / enter payments"}</button>${i.payload.scan_pages?.length ? `<button class="action" data-ocr="${i.id}">Run local OCR</button>` : ""}` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-complete-bill="${i.id}">Prepare complete bill</button>` : ""}${i.payload.file_kind === "pdf" && i.status !== "reviewed" ? `<button class="action" data-evidence="${i.id}">Review unresolved source fields</button>` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-automatic-hra="${i.id}">Build HRA draft from PDF</button>` : ""}${i.payload.extracted ? outerSummary(i.payload.extracted) : ""}<p>${i.payload.ga55?.payments.length ?? 0} candidate payment entries</p><details><summary>Source text (${i.payload.pages.length} pages)</summary>${i.payload.pages.map((t, n) => `<h3>Page ${n + 1}</h3><pre>${escapeHTML(t || "No selectable text")}</pre>`).join("")}</details></div>`,
     )
     .join("");
   renderPersistent(
@@ -646,6 +653,7 @@ async function refresh() {
       )
       .join(""),
   );
+  loadDocumentRecords().catch(e=>notify(e.message));
   renderPersistent(
     "groupReviews",
     groups
@@ -1101,7 +1109,7 @@ function readComponents(form, name) {
 async function openBillCase(id) {
   notify('Loading saved source evidence and order decisions');
   const result=await api(`imports/${id}/case_review`);
-  renderBillCase(id,result); openModule('arrears');
+  renderBillCase(id,result); openModule('arrears'); notify('Source evidence loaded. Review unresolved fields before preparing the bill.');
 }
 function renderBillCase(id,result) {
   const codes=[...new Set(result.facts.bills.map(b=>b.employee_code).filter(Boolean))];
@@ -1124,7 +1132,7 @@ function renderBillCase(id,result) {
         if(Number(payload.extra_deduction_amount)!==0)payload.extra_deductions=[{name:payload.extra_deduction_name,mode:'fixed',value:payload.extra_deduction_amount,reference:payload.deduction_reference}];
         delete payload.extra_deduction_name;delete payload.extra_deduction_amount;
         const bill=await post(`imports/${id}/bill_prepare`,payload);await loadCompleteBills();
-        $('completeBillResult').innerHTML=`<h3>${bill.status==='ready'?'Consolidated draft prepared':'Source checks still required'}</h3>${(bill.blockers||[]).map(b=>`<p class="warning">${escapeHTML(b.month||'')} ${escapeHTML(b.message)}</p>`).join('')}${(bill.rows||[]).map(row=>`<h4>${escapeHTML(row.month)}</h4>${table(row.components,['head','due','drawn','prior_settlement','difference'])}`).join('')}${bill.reference_comparison?`<p class="warning">Reference comparison: ${escapeHTML(bill.reference_comparison.status)} · ${(bill.reference_comparison.discrepancies||[]).length} candidate component discrepancies; ${(bill.reference_comparison.unresolved||[]).length} unresolved checks. Review original cells before approval.</p>`:''}<p>Gross arrear: ${escapeHTML(bill.totals?.difference??'unresolved')} · Net: ${escapeHTML(bill.deductions_confirmed ? bill.totals?.net_payable : 'provisional; confirm deductions')}</p>${bill.bill_id?`<a href="/suite/api/bills/${bill.bill_id}/pdf">PDF statement</a> · <a href="/suite/api/bills/${bill.bill_id}/excel">Excel statement</a>`:''}`;return;
+        $('completeBillResult').innerHTML=`<h3>${bill.status==='ready'?'Consolidated draft prepared':'Source checks still required'}</h3>${(bill.blockers||[]).map(b=>`<p class="warning">${escapeHTML(b.month||'')} ${escapeHTML(b.message)}</p>`).join('')}${(bill.rows||[]).map(row=>`<h4>${escapeHTML(row.month)}</h4>${table(row.components,['head','due','drawn','prior_settlement','difference'])}`).join('')}${bill.reference_comparison?`<p class="warning">Reference comparison: ${escapeHTML(({reference_not_read:'Statement not read automatically; compare the original manually.',candidate_discrepancies:'Read cells differ from the source calculation; verify the original.',candidate_matches:'Read cells match; confirm source comparison before approval.',reference_review_required:'Reference figures remain unresolved; check the original.'})[bill.reference_comparison.status]||bill.reference_comparison.status)}</p>`:''}<p>Gross arrear: ${escapeHTML(bill.totals?.difference??'unresolved')} · Net: ${escapeHTML(bill.deductions_confirmed ? bill.totals?.net_payable : 'provisional; confirm deductions')}</p>${bill.bill_id?`<a href="/suite/api/bills/${bill.bill_id}/pdf">PDF statement</a> · <a href="/suite/api/bills/${bill.bill_id}/excel">Excel statement</a>`:''}`;notify(bill.status==='ready'?'Consolidated draft prepared; verify deductions and source comparison.':'Provisional calculation saved; resolve the listed source checks before approval.');return;
       }
       await refresh();await openBillCase(id);notify('Source decision saved; dependent checks updated');
     }catch(x){notify(x.message);}finally{if(button)button.disabled=false;}
@@ -1150,3 +1158,20 @@ function renderStatementGrid(id,grid) {
  target.innerHTML=`<p class="warning">${escapeHTML(grid.notice||'Check each recognized cell against the source. Handwriting confidence does not prove the digits are correct.')}</p><p>${(grid.cells||[]).filter(c=>c.status==='recognized').length} cells read; ${(grid.semantic_rows||[]).length} candidate monthly rows. Unreadable cells remain blank.</p><div class="scroll"><table><thead><tr><th>Physical row</th>${Array.from({length:columns},(_,i)=>`<th>Column ${i+1}</th>`).join('')}</tr></thead><tbody>${(grid.table_rows||[]).map((row,i)=>`<tr><td>${i+1}</td>${row.map(v=>`<td>${escapeHTML(v??'Not read')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>${columns?`<details><summary>Match faint printed column headings</summary><form id="gridColumnMapping"><label>Month column<select name="month">${options}</select></label>${['due','drawn'].map(group=>`<fieldset><legend>${group}</legend>${['Basic','DA','HRA','HDA','CCA','Total'].map(head=>`<label>${head}<select name="${group}.${head}">${options}</select></label>`).join('')}</fieldset>`).join('')}<label>Source header reference<input name="reference" required></label><label><input type="checkbox" name="reviewed" required>I checked the mapping against the original printed headings</label><button class="action">Apply checked column mapping</button></form></details>`:''}<p>${escapeHTML((grid.issues||[]).join('; '))}</p><div id="gridSemanticRows">${(grid.semantic_rows||[]).map(r=>`<p>${escapeHTML(r.month)}: ${escapeHTML((r.issues||[]).join('; '))}</p>`).join('')}</div>`;
  const form=$('gridColumnMapping');if(form)form.onsubmit=async e=>{e.preventDefault();e.stopPropagation();try{const values=Object.fromEntries(new FormData(form));if(values.month==='')throw Error('Choose the source month column');const mapping={month_column:Number(values.month),groups:{due:{},drawn:{}}};for(const group of ['due','drawn'])for(const head of ['Basic','DA','HRA','HDA','CCA','Total'])if(values[group+'.'+head]!=='')mapping.groups[group][head]=Number(values[group+'.'+head]);const result=await post(`imports/${id}/statement_grid`,{page:grid.source_page,mapping,reviewed:form.elements.reviewed.checked,reference:values.reference});renderStatementGrid(id,result);}catch(x){notify(x.message);}};
 }
+
+let documentRecordsRequest=0;
+async function loadDocumentRecords() {
+ const version=++documentRecordsRequest;
+ const query=new URLSearchParams(new FormData($('documentFilterForm')));
+ const data=await api('document_records?'+query);
+ if(version!==documentRecordsRequest)return;
+ const selected=$('documentAmountField').value;
+ $('documentAmountField').innerHTML=data.amount_fields.map(field=>`<option value="${escapeHTML(field)}">${escapeHTML(field.replace(':',': '))}</option>`).join('');
+ if(data.amount_fields.includes(selected))$('documentAmountField').value=selected;
+ $('documentRecords').innerHTML=`<p><b>${data.count} matching records</b></p>`+table(data.records,['document','employee_code','pay_month','bill_type','bill_no','gross','net']);
+ $('filteredDocumentPdf').href='/suite/api/document_records/pdf?'+query;
+ $('filteredDocumentExcel').href='/suite/api/document_records/excel?'+query;
+}
+$('documentFilterForm').onsubmit=e=>{e.preventDefault();loadDocumentRecords().catch(x=>notify(x.message));};
+$('clearDocumentFilters').onclick=()=>{$('documentFilterForm').reset();refresh().catch(x=>notify(x.message));};
+$('documentKindFilter').onchange=()=>refresh().catch(x=>notify(x.message));

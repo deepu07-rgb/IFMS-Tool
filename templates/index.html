@@ -944,6 +944,7 @@ Use Download before moving backups outside this computer.
         <button class="btn btn-primary" onclick="loadEmployees(1)">Apply Filters</button>
         <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
         <button class="btn btn-success" onclick="exportExcel()">Export Filtered Employee Data</button>
+        <button class="btn btn-outline" onclick="exportEmployeePdf()">Export Filtered PDF</button>
         <span id="filterStatus" style="font-size:12px;color:var(--text2);margin-left:auto;"></span>
       </div>
       <div id="activeFilterChips" class="active-filter-chips"></div>
@@ -2920,6 +2921,11 @@ function toggleAdvanced() {
 }
 
 // ===== EXPORT =====
+function exportEmployeePdf() {
+  const p = getFilterParams();
+  window.location.href = '/api/export_pdf?' + p.toString();
+}
+
 async function exportExcel() {
   const p = getFilterParams();
   showToast('Generating Excel...', 'success');
@@ -4102,4 +4108,11 @@ loadStats();
 </body>
 </html>
 
-<script>window.addEventListener('load',()=>{const tab=location.hash.slice(1);if(tab && document.querySelector(`.tab[onclick="switchTab('${CSS.escape(tab)}')"]`)){switchTab(tab)}});</script>
+<script>
+function applyLinkedTab() {
+  const tab=location.hash.slice(1);
+  if(tab && document.querySelector(`.tab[onclick="switchTab('${CSS.escape(tab)}')"]`)) switchTab(tab);
+}
+window.addEventListener('load',applyLinkedTab);
+window.addEventListener('hashchange',applyLinkedTab);
+</script>

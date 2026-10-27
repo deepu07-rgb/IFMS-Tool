@@ -4602,6 +4602,79 @@ def get_validation():
     return jsonify({'uploads': [dict(r) for r in rows]})
 
 
+@app.route('/api/export_pdf')
+def export_employee_pdf():
+    """Export every matching employee using the same filters as Employee Data."""
+    from html import escape
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    if not app.config.get('USE_V2_PARSER', False):
+        return jsonify({'error': 'V1 export disabled'}), 400
+    db = get_db()
+    conditions, params = build_employee_filter_conditions(request.args)
+    where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
+    employees = db.execute(f'''SELECT e.*, b.bill_no
+        FROM employees_v2 e LEFT JOIN bills_v2 b ON b.id = e.bill_id
+        {where} ORDER BY e.source_filename, e.group_name, e.sr_no''', params).fetchall()
+    if not employees:
+        return jsonify({'error': 'No data to export'}), 404
+    # Read the complete component ledger, including negative and zero amounts.
+    components = {}
+    for employee in employees:
+        components[employee['id']] = db.execute('''SELECT component_type, raw_head,
+            normalized_head, amount FROM employee_components_v2
+            WHERE employee_id = ? ORDER BY id''', (employee['id'],)).fetchall()
+    output = BytesIO()
+    styles = getSampleStyleSheet()
+    small = styles['BodyText']
+    small.fontSize = 9
+    small.leading = 12
+    def paragraph(value):
+        return Paragraph(escape(str(value or '')), small)
+    def money(value):
+        return f'{float(value or 0):.2f}'
+    count = len(employees)
+    story = [Paragraph('Filtered Employee Data', styles['Title']),
+             paragraph('DRAFT - Verify extracted amounts against the original source before official use.'),
+             paragraph(f"{count} employee{'s' if count != 1 else ''}"), Spacer(1, 8)]
+    totals = [sum(e[field] or 0 for e in employees)
+              for field in ('gross_amount', 'sum_deduction', 'net_total')]
+    summary = Table([['Gross INR', 'Deduction INR', 'Net INR'], [money(v) for v in totals]],
+                    colWidths=[170, 170, 170])
+    summary.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), .3, colors.grey),
+                                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey)]))
+    story.extend([summary, Spacer(1, 12)])
+    chips = build_employee_filter_chips(request.args)
+    if chips:
+        story.extend([paragraph('Filters: ' + '; '.join(str(chip.get('text') or chip) for chip in chips)), Spacer(1, 8)])
+    for employee in employees:
+        story.append(Paragraph(escape(f"{employee['sr_no'] or ''}. {employee['raw_name'] or ''} - {employee['employee_id'] or ''}"), styles['Heading3']))
+        story.append(paragraph(f"Source: {employee['source_filename'] or ''}, page {employee['page_no'] or ''}; Bill: {employee['bill_no'] or ''}; Group: {employee['group_name'] or ''}; Month: {employee['month_year'] or ''}"))
+        story.append(paragraph('Gross INR ' + money(employee['gross_amount']) +
+                               ' | Deduction INR ' + money(employee['sum_deduction']) +
+                               ' | Net INR ' + money(employee['net_total'])))
+        data = [['Component', 'Type', 'Amount INR']]
+        data.extend([[paragraph(c['raw_head'] or c['normalized_head']), paragraph(c['component_type']), money(c['amount'])]
+                     for c in components[employee['id']]])
+        if len(data) > 1:
+            table = Table(data, colWidths=[290, 130, 90], repeatRows=1, hAlign='LEFT')
+            table.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), .25, colors.grey),
+                                      ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                                      ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                      ('ALIGN', (-1, 1), (-1, -1), 'RIGHT')]))
+            story.append(table)
+        story.append(Spacer(1, 10))
+    SimpleDocTemplate(output, pagesize=A4, leftMargin=36, rightMargin=36,
+                      topMargin=36, bottomMargin=36).build(story)
+    output.seek(0)
+    return send_file(output, mimetype='application/pdf', as_attachment=True,
+                     download_name='filtered-employee-data.pdf')
+
+
 @app.route('/api/export')
 @app.route('/api/export_filtered')
 def export_excel():
