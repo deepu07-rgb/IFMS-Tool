@@ -1013,6 +1013,8 @@ $("employeeHistory").onclick = async (e) => {
     f.elements.printed_drawn_gross.value = payment.printed_gross || "";
     f.elements.drawn_reference.value =
       payment.bill_no + " / " + payment.reference;
+    f.elements.category.value = "";
+    f.elements.hra_eligibility_reference.value = "";
     f.elements.new_basic.value = "";
     f.elements.effective_from.value = "";
     f.elements.reviewed.checked = false;
@@ -1032,6 +1034,7 @@ $("incrementForm").onsubmit = async (e) => {
     p.end = p.month + "-" + new Date(Date.UTC(year, month, 0)).getUTCDate();
     p.reviewed = f.elements.reviewed.checked;
       if (f.elements.machine_facts_reviewed) p.machine_facts_reviewed = f.elements.machine_facts_reviewed.checked;
+    p.hra_eligible = p.category !== "NONE";
     p.drawn = {};
     for (const head of ["BASIC", "DA", "HRA", "HDA"])
       p.drawn[head] = p["drawn_" + head];

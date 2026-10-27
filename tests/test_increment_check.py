@@ -183,3 +183,36 @@ def test_increment_exports_retain_the_basic_and_rate_basis(client):
         assert saved[id]["calculation"]["rows"][0]["basic"] == "55500"
         assert saved[id]["calculation"]["rows"][0]["drawn_basic"] == "53900"
     assert saved[r.json["claim_ids"][1]]["calculation"]["rows"][0]["due_rate"] == "60"
+
+
+def test_explicit_reviewed_hra_exemption_does_not_create_city_hra(client):
+    p = setup(client)
+    p.update(
+        hra_eligible=False,
+        hra_eligibility_reference="Reviewed accommodation eligibility",
+        printed_drawn_gross="96897",
+    )
+    p["drawn"]["HRA"] = "0"
+    response = client.post("/suite/api/increment_check", json=p)
+    assert response.status_code == 201, response.json
+    assert response.json["total"] == "2773.00"
+    hra = next(r for r in response.json["components"] if r["head"] == "HRA")
+    assert hra["due"] == "0.00" and hra["difference"] == "0.00"
+    assert "HRA" not in response.json["rates"]
+    payloads = client.get("/suite/api/claims").json
+    assert all(c["payload"]["hra_eligible"] is False for c in payloads)
+    assert all(
+        c["payload"]["hra_eligibility_reference"]
+        == "Reviewed accommodation eligibility"
+        for c in payloads
+    )
+
+
+def test_hra_exemption_requires_reference_and_zero_drawn(client):
+    p = setup(client)
+    p.update(hra_eligible=False)
+    assert client.post("/suite/api/increment_check", json=p).status_code == 400
+    p["hra_eligibility_reference"] = "Checked eligibility"
+    assert client.post("/suite/api/increment_check", json=p).status_code == 400
+    p["hra_eligible"] = "false"
+    assert client.post("/suite/api/increment_check", json=p).status_code == 400

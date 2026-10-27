@@ -575,3 +575,47 @@ def test_low_confidence_bill_type_and_order_fields_remain_unresolved():
         result = facts_from_pages([page(words)])
         assert not result["orders"]
         assert result["issues"][-1]["blocking"] is True
+
+
+def test_decorative_allowance_header_dash_preserves_bill_geometry():
+    words = header() + [
+        w("July", 0.05, 0.35),
+        w("2031", 0.05, 0.365),
+        w("Regular", 0.12, 0.35),
+        w("123456789", 0.18, 0.35),
+        w("Basic", 0.31, 0.33),
+        w("18000.00", 0.37, 0.33),
+        w("18000.00", 0.56, 0.33),
+    ]
+    for word in words:
+        if word["text"] == "Allowances":
+            word["text"] = "---Allowances-"
+    result = facts_from_pages([page(words)])
+    assert len(result["bills"]) == 1
+    assert result["bills"][0]["complete"]
+    assert result["bills"][0]["allowances"]["Basic"] == "18000.00"
+
+
+def test_independent_exact_header_recovers_neural_label_typo_without_guessing(
+    monkeypatch,
+):
+    import pymupdf
+    import ifms_suite.document_facts as module
+
+    doc = pymupdf.open()
+    p = doc.new_page(width=200, height=200)
+
+    def recognize(_):
+        return (
+            [[[[280, 120], [310, 120], [310, 130], [280, 130]], "Gress", 0.95]],
+            None,
+        )
+
+    secondary = dict(w("Gross", 0.5, 0.2), recognizer="tesseract", confidence=0.95)
+    monkeypatch.setattr(module, "_tesseract_words", lambda *args: [secondary])
+    words = module._recognize_page(p, recognize, ("unused", {}, None))
+    assert any(q["text"] == "Gross" and q["recognizer"] == "tesseract" for q in words)
+    assert any(q["text"] == "Gress" for q in words)
+    secondary["confidence"] = 0.2
+    words = module._recognize_page(p, recognize, ("unused", {}, None))
+    assert not any(q["text"] == "Gross" for q in words)

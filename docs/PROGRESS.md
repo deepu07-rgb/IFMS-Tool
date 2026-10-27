@@ -90,3 +90,11 @@ Final active regression: 257 passed, 14 skipped (legacy expected_totals excluded
 Source pushed as `9842c36` on `feat/unified-ifms`. Reviewer reproduced the prior-credit defect, then confirmed its regression test and fix. Final frozen smoke passed. Windows build: https://github.com/deepu07-rgb/IFMS-Tool/actions/runs/40485278959 (completion pending at documentation time).
 
 User paused package builds pending additional handwritten and computer-generated samples. Pushes continue regression checks only; packaging, packaged smoke and artifact upload require an explicit manual workflow dispatch. Do not dispatch a package build until the user resumes that phase.
+
+## Additional increment sample checks — 27 October 2026
+
+Tested two new private full-PDF samples without entering figures/dates or approving source reviews, then compared the reviewed deterministic checker separately. Neither sample is an unattended OCR acceptance pass: no usable handwritten due-drawn rows were recognized; source increment-order interpretation and some bill facts remain unresolved. Do not advance to a final software build on the strength of reviewed-input totals.
+
+Fixed decorated allowance headings and recovery of a reliable independent structural heading when the neural reading is incorrect. Raw readings remain available; monetary confidence gates are unchanged. Added an explicit reviewed HRA-not-payable option with reference/zero-drawn validation and saved audit fields. No employee sample data is committed.
+
+Verification: 95 focused tests passed; full run 262 passed, 14 skipped, and the 13 previously documented `tests/test_expected_totals.py` failures (fixtures 1–13). Independent review found no important issues. Saved-evidence Kana Ram replay remains blocked with one rate review. No packaging was performed; automatic builds stay paused pending further sample testing and resolution of the remaining source-reading gaps.

@@ -90,6 +90,14 @@ def register_increments(suite):
             )
         if any(v != rounded(v) for v in drawn.values()):
             raise ValueError("Drawn amounts may have at most two decimals")
+        hra_eligible = p.get("hra_eligible", True)
+        if not isinstance(hra_eligible, bool):
+            raise ValueError("HRA eligibility must be explicitly true or false")
+        hra_reference = str(p.get("hra_eligibility_reference") or "").strip()
+        if not hra_eligible and (not hra_reference or drawn["HRA"] != 0):
+            raise ValueError(
+                "No-HRA treatment needs a reviewed eligibility reference and zero actual drawn HRA"
+            )
         warnings = []
         with database() as db:
             guard_prior_increment(
@@ -100,7 +108,7 @@ def register_increments(suite):
                 for r in db.execute("SELECT payload FROM suite_rates")
             ]
             selected = {}
-            for head in ("DA", "HRA"):
+            for head in (("DA", "HRA") if hra_eligible else ("DA",)):
                 eligible = [
                     r
                     for r in rates
@@ -111,12 +119,16 @@ def register_increments(suite):
                 rate = period_rate(eligible, a, b, head + " rate")
                 selected[head] = rate
             da = money(selected["DA"]["rate"])
-            hra = money(selected["HRA"]["rate"])
+            hra = money(selected["HRA"]["rate"]) if hra_eligible else Decimal(0)
             due = {"BASIC": basic, "DA": basic * da / 100, "HRA": basic * hra / 100}
             formula = {
                 "BASIC": "Approved pay-matrix value from reviewed increment order",
                 "DA": f"Basic x {da}%",
-                "HRA": f"Basic x {hra}%",
+                "HRA": (
+                    f"Basic x {hra}%"
+                    if hra_eligible
+                    else "Reviewed HRA not payable: " + hra_reference
+                ),
             }
             if p.get("hda_rule"):
                 rule = p["hda_rule"]
@@ -215,6 +227,8 @@ def register_increments(suite):
                     rate_snapshot=selected,
                     increment_heads=heads,
                     category=p.get("category", ""),
+                    hra_eligible=hra_eligible,
+                    hra_eligibility_reference=hra_reference,
                 )
                 id = db.execute(
                     "INSERT INTO suite_claims(payload,calculation) VALUES(?,?)",

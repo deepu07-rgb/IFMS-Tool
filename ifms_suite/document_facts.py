@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from statistics import median
 
-FACTS_VERSION = "geometry-printed-v3"
+FACTS_VERSION = "geometry-printed-v4"
 
 # Fixed recognition gates are independent of reconciliation and expected totals.
 NEURAL_CONFIDENCE = 0.85
@@ -211,7 +211,9 @@ def facts_from_pages(pages):
         employee = _identity(header_identities)
         ga55 = "GA55" in compact or ("ALLOWANCES" in compact and "GROSS" in compact)
         if ga55:
-            allowance = next((w for w in words if _text(w) == "ALLOWANCES"), None)
+            allowance = next(
+                (w for w in words if _text(w).strip("-—–_=.") == "ALLOWANCES"), None
+            )
             gross_header = next((w for w in words if _text(w) == "GROSS"), None)
             if allowance and gross_header:
                 net_header = next(
@@ -924,6 +926,16 @@ def _recognize_page(page, recognizer, runtime):
         for candidate in secondary:
             kind = _critical_kind(candidate, is_order, rate_x)
             if not kind:
+                # Preserve a trusted independent reading of missing structural
+                # labels. Never turn a neural typo into a corrected number.
+                label = _text(candidate).strip("-—–_=.")
+                if (
+                    label in {"ALLOWANCES", "GROSS", "NET"}
+                    and candidate["box"][1] < 0.4
+                    and _reliable(candidate)
+                    and not any(_text(q).strip("-—–_=.") == label for q in words)
+                ):
+                    words.append(candidate)
                 continue
             overlapping = [
                 q

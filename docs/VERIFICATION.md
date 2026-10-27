@@ -86,3 +86,11 @@ The full run before the final credit guard reported 257 passed, 14 skipped and 1
 Final active regression: 257 passed, 14 skipped (legacy expected_totals excluded). Focused recovery tests: 83 passed. Strict browser: zero claims, one blank review field, no numeric/date inputs, approvals, external requests or JavaScript errors. Linux portable payload: 454,854,338 bytes with neural models; system Tesseract, not complete Windows measurement.
 
 Source pushed as `9842c36` on `feat/unified-ifms`. Reviewer reproduced the prior-credit defect, then confirmed its regression test and fix. Final frozen smoke passed. Windows build: https://github.com/deepu07-rgb/IFMS-Tool/actions/runs/40485278959 (completion pending at documentation time).
+
+## Additional July increment samples — 27 October 2026
+
+Fresh private workspaces tested two complete scanned PDFs through GA55 OCR, due-drawn OCR and the available source-driven workflow. No figures, dates or approvals were injected in the unassisted tests. Both remained blocked, with zero automatic claims and zero recognized statement rows. The separate reviewed-input increment checker matched independently checked source arithmetic after adding explicit no-HRA eligibility support. These results are not automatic OCR approvals.
+
+Final extraction recovered seven records/five complete in one sample and nine records/three complete in the other. Missing monetary components, continuation identity and unsupported financial order pages remain blocking. No missing digits were reconstructed from expected totals. The private comparison report includes month/component arithmetic, deduction caveats, original failure, and before/after evidence.
+
+Commands: `python -m pytest` — 262 passed, 14 skipped, 13 inherited `tests/test_expected_totals.py` failures; recovery/increment focused suite — 95 passed; `node --check ifms_suite/static/suite.js` and `git diff --check` passed. Independent code review found no important issues. No software build was run.
