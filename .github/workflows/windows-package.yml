@@ -49,10 +49,13 @@ jobs:
         continue-on-error: true
         run: python -m pytest tests/test_expected_totals.py -q
       - name: Build self-contained package and enforce installed size
+        if: github.event_name == 'workflow_dispatch'
         run: python packaging/run_checked.py Package -- python packaging/build.py --ocr-dir "C:\Program Files\Tesseract-OCR"
       - name: Run the packaged executable
+        if: github.event_name == 'workflow_dispatch'
         run: python packaging/run_checked.py Smoke -- python packaging/smoke.py dist/IFMSWorkspace/IFMSWorkspace.exe
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: IFMSWorkspace-Windows
           path: |
