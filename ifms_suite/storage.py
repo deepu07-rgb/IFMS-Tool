@@ -23,6 +23,7 @@ def initialize():
     with database() as db:
         db.executescript(
             """
+        CREATE TABLE IF NOT EXISTS suite_bills(id INTEGER PRIMARY KEY,import_id INTEGER NOT NULL,fingerprint TEXT UNIQUE NOT NULL,payload TEXT NOT NULL,result TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',review TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS suite_payment_allocations(payment_id INTEGER PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS suite_claim_settlements(claim_id INTEGER PRIMARY KEY,payment_id INTEGER UNIQUE NOT NULL,reference TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS suite_rate_audit(id INTEGER PRIMARY KEY,rate_id INTEGER,previous_payload TEXT,new_payload TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);

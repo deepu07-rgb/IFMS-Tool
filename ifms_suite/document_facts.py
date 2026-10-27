@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from statistics import median
 
-FACTS_VERSION = "geometry-printed-v5"
+FACTS_VERSION = "geometry-printed-v6"
 
 # Fixed recognition gates are independent of reconciliation and expected totals.
 NEURAL_CONFIDENCE = 0.85
@@ -146,6 +146,116 @@ def _heads(words, page, start, end, left, right):
     return result, evidence, issues
 
 
+def _deduction_heads(words, page, start, end, geometry):
+    """Read the two deduction lanes independently of totals and allowance lanes.
+
+    Wrapped ROAD/WAYS labels are joined only when both printed fragments exist.
+    Unknown printed labels remain literal heads; no money is inferred from totals.
+    """
+    if geometry is None:
+        return {}, [], []
+    left, right = geometry
+    middle = (left + right) / 2
+    result, evidence, issues = {}, [], []
+    region = [
+        w
+        for w in words
+        if left <= w["box"][0] and w["box"][2] <= right and start <= _y(w) < end
+    ]
+    used = set()
+    for lane_left, lane_right in ((left, middle), (middle, right)):
+        lane = [w for w in region if lane_left <= w["box"][0] < lane_right]
+        labels = [
+            w
+            for w in lane
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9 ._/-]*", w["text"])
+            and _text(w).strip("-_.")
+            not in {
+                "DEDUCTIONS",
+                "TOTAL",
+                "NET",
+                "AMOUNT",
+                "WAYS",
+                "DEDUTI",
+                "ON",
+                "DEDUTION",
+                "DEDUCTION",
+            }
+        ]
+        consumed_labels = set()
+        for label in sorted(labels, key=_y):
+            if id(label) in consumed_labels:
+                continue
+            head = _text(label).strip("-_.")
+            fragments = [label]
+            if head == "ROAD":
+                wrapped = sorted(
+                    (
+                        w
+                        for w in lane
+                        if abs(w["box"][0] - label["box"][0]) < 0.015
+                        and 0 < _y(w) - _y(label) < 0.065
+                        and _text(w).strip(".")
+                        in {"WAYS", "DEDUTI", "ON", "DEDUTION", "DEDUCTION"}
+                    ),
+                    key=_y,
+                )
+                if wrapped and _text(wrapped[0]) == "WAYS":
+                    head = "ROADWAYS"
+                    fragments += wrapped
+            if head == "RP":
+                wrapped = sorted(
+                    (
+                        w
+                        for w in lane
+                        if abs(w["box"][0] - label["box"][0]) < 0.015
+                        and 0 < _y(w) - _y(label) < 0.065
+                        and _text(w) in {"KALYAN", "NIDHI"}
+                    ),
+                    key=_y,
+                )
+                if [_text(w) for w in wrapped] == ["KALYAN", "NIDHI"]:
+                    head = "RP KALYAN NIDHI"
+                    fragments += wrapped
+                    consumed_labels.update(id(w) for w in wrapped)
+            candidates = [
+                w
+                for w in lane
+                if label["box"][2] <= w["box"][0]
+                and abs(_y(w) - _y(label)) < 0.013
+                and _money(w["text"]) is not None
+            ]
+            candidates.sort(key=lambda w: (abs(_y(w) - _y(label)), w["box"][0]))
+            if not candidates:
+                issues.append("Unreadable deduction amount for " + head)
+                evidence.extend(_evidence(w, page) for w in fragments)
+                continue
+            value = candidates[0]
+            key = (tuple(value["box"]), value["text"])
+            if key in used or (
+                len(candidates) > 1
+                and abs(abs(_y(candidates[1]) - _y(label)) - abs(_y(value) - _y(label)))
+                < 0.003
+            ):
+                issues.append("Ambiguous deduction amount for " + head)
+                continue
+            used.add(key)
+            evidence.extend(_evidence(w, page) for w in fragments + [value])
+            issues.extend(_recognition_flags(fragments + [value]))
+            if head in result:
+                issues.append("Repeated deduction " + head)
+            else:
+                result[head] = _money(value["text"])
+    for word in region:
+        if (
+            _critical_kind(word) == "money"
+            and (tuple(word["box"]), word["text"]) not in used
+        ):
+            issues.append("Unassigned deduction amount " + word["text"])
+            evidence.append(_evidence(word, page))
+    return result, evidence, issues
+
+
 def _fiscal_year(text):
     match = re.fullmatch(r"(20\d{2})-(\d{2})", text)
     if match and (int(match[1]) + 1) % 100 == int(match[2]):
@@ -211,6 +321,7 @@ def facts_from_pages(pages):
     issues = []
     layout = None
     payment_layout = (None, None)
+    deduction_layout = None
     previous = None
     classifications = []
     for page in pages:
@@ -227,6 +338,8 @@ def facts_from_pages(pages):
                     scope="document",
                     blocking=True,
                     issue="Unclassified nonblank page; financial instructions and adjustments require resolution",
+                    source_pages=[number],
+                    evidence=[_evidence(w, number) for w in words],
                 )
             )
         header_identities = [
@@ -267,21 +380,41 @@ def facts_from_pages(pages):
                     ),
                     None,
                 )
-                payment_layout = (
-                    (
+                if deduction_header or net_header:
+                    payment_layout = (
                         (
-                            deduction_header["box"][0] - 0.025,
                             (
-                                net_header["box"][0] - 0.025
-                                if net_header
-                                else deduction_header["box"][2] + 0.05
-                            ),
+                                deduction_header["box"][0] - 0.025,
+                                (
+                                    net_header["box"][0] - 0.025
+                                    if net_header
+                                    else deduction_header["box"][2] + 0.05
+                                ),
+                            )
+                            if deduction_header
+                            else None
+                        ),
+                        (net_header["box"][0] - 0.025, 1) if net_header else None,
+                    )
+                section_header = next(
+                    (
+                        w
+                        for w in words
+                        if _text(w).strip("-—–_=.") == "DEDUCTIONS"
+                        and gross_header["box"][2] < w["box"][0]
+                        and (
+                            not deduction_header
+                            or w["box"][0] < deduction_header["box"][0] - 0.03
                         )
-                        if deduction_header
-                        else None
+                        and abs(_y(w) - _y(gross_header)) < 0.05
                     ),
-                    (net_header["box"][0] - 0.025, 1) if net_header else None,
+                    None,
                 )
+                if section_header and deduction_header:
+                    deduction_layout = (
+                        gross_header["box"][2] + 0.008,
+                        deduction_header["box"][0] - 0.008,
+                    )
                 # Two label/value lanes; discover label starts from observed heads.
                 labels = sorted(
                     w["box"][0]
@@ -333,7 +466,10 @@ def facts_from_pages(pages):
                 and left <= w["box"][0] < right
                 and 0.12 < _y(w) < continuation_end
             ]
-            if previous and carry_words:
+            carry_deductions, carry_ev, carry_flags = _deduction_heads(
+                words, number, 0.12, continuation_end, deduction_layout
+            )
+            if previous and (carry_words or carry_ev or carry_flags):
                 same_identity = bool(
                     employee
                     and all(_reliable(w) for w in header_identities)
@@ -365,6 +501,18 @@ def facts_from_pages(pages):
                         previous["evidence"].extend(ev)
                         previous["_issues"].extend(flags)
                         previous["_allowance_flags"].extend(flags)
+                        previous["source_pages"].append(number)
+                    for head, value in carry_deductions.items():
+                        if head in previous["deductions"]:
+                            previous["_deduction_flags"].append(
+                                "Repeated deduction " + head + " in continuation"
+                            )
+                        else:
+                            previous["deductions"][head] = value
+                    previous["deduction_evidence"].extend(carry_ev)
+                    previous["evidence"].extend(carry_ev)
+                    previous["_deduction_flags"].extend(carry_flags)
+                    if number not in previous["source_pages"]:
                         previous["source_pages"].append(number)
                 else:
                     issues.append(
@@ -444,6 +592,9 @@ def facts_from_pages(pages):
                     )
                 )
                 allowance_flags = list(flags)
+                deduction_heads, deduction_ev, deduction_flags = _deduction_heads(
+                    words, number, start, end, deduction_layout
+                )
                 deductions, deductions_ev, deductions_flags = _printed_total(
                     words, gross, payment_layout[0], "deductions", number
                 )
@@ -496,6 +647,10 @@ def facts_from_pages(pages):
                         type_labels and all(_reliable(w) for w in type_labels)
                     ),
                     allowances=heads,
+                    deductions=deduction_heads,
+                    deduction_evidence=deduction_ev,
+                    _deduction_flags=deduction_flags + deductions_flags,
+                    _deduction_layout=deduction_layout is not None,
                     printed_gross=_money(gross["text"]),
                     printed_deductions=deductions,
                     printed_net=net,
@@ -504,6 +659,7 @@ def facts_from_pages(pages):
                     complete=False,
                     source_pages=[number],
                     evidence=ev
+                    + deduction_ev
                     + deductions_ev
                     + net_ev
                     + [_evidence(gross, number)]
@@ -671,6 +827,24 @@ def facts_from_pages(pages):
     for bill in bills:
         flags = bill.pop("_issues")
         allowance_flags = bill.pop("_allowance_flags")
+        deduction_flags = bill.pop("_deduction_flags")
+        has_deduction_layout = bill.pop("_deduction_layout")
+        printed_deductions = bill["printed_deductions"]
+        bill["deductions_reconciled"] = (
+            sum(map(Decimal, bill["deductions"].values()), Decimal(0))
+            == Decimal(printed_deductions)
+            if printed_deductions is not None and bill["deductions"]
+            else None
+        )
+        bill["deductions_complete"] = bool(
+            has_deduction_layout
+            and bill["deductions_reconciled"]
+            and not deduction_flags
+        )
+        if has_deduction_layout:
+            flags.extend(deduction_flags)
+            if not bill["deductions_reconciled"]:
+                flags.append("Deduction heads do not reconcile to printed deductions")
         bill.pop("_page_key", None)
         bill.pop("_printed_page", None)
         reconciled = sum(
@@ -711,8 +885,15 @@ def facts_from_pages(pages):
                     "pay_month": bill["pay_month"],
                 }
             )
+    from .pay_orders import extract_pay_orders, extract_order_candidates
+
     return dict(
-        bills=bills, orders=orders, issues=issues, page_classifications=classifications
+        bills=bills,
+        orders=orders,
+        issues=issues,
+        page_classifications=classifications,
+        pay_orders=extract_pay_orders(pages),
+        order_candidates=extract_order_candidates(pages),
     )
 
 

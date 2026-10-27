@@ -140,3 +140,100 @@ def test_total_row_with_identity_must_not_become_an_employee_increment():
     ]
     rows = extract(words)
     assert len(rows) == 1
+
+
+def test_name_column_keeps_association_unresolved_and_extracts_old_and_new_basic():
+    words = [
+        word
+        for word in table()
+        if word["text"] not in {"Employee ID", "RJAB203012345678"}
+    ]
+    words += [w("Employee Name", 0.05, 0.3), w("राम लाल", 0.05, 0.4)]
+    row = extract(words)[0]
+    assert row["employee_name"] == "राम लाल"
+    assert row["employee_code"] == ""
+    assert row["old_basic"] == "27000.00"
+    assert row["basic_amount"] == "27800.00"
+    assert row["unresolved_fields"] == ["employee_code"]
+    assert not row["complete"]
+
+
+def test_labeled_narrative_distinguishes_issue_from_effective_date():
+    words = [
+        w("Increment Order", 0.05, 0.05),
+        w("Issue Date", 0.05, 0.1),
+        w("18.08.2031", 0.3, 0.1),
+        w("Employee Name", 0.05, 0.2),
+        w("राम लाल", 0.3, 0.2),
+        w("Old Basic", 0.05, 0.3),
+        w("27000/-", 0.3, 0.3),
+        w("New Basic", 0.05, 0.4),
+        w("27800/-", 0.3, 0.4),
+        w("Effective From", 0.05, 0.5),
+        w("01.07.2031", 0.3, 0.5),
+    ]
+    row = extract(words)[0]
+    assert row["effective_from"] == "2031-07-01"
+    assert row["old_basic"] == "27000.00"
+    assert row["basic_amount"] == "27800.00"
+    assert row["employee_name"] == "राम लाल"
+    assert not row["complete"]
+
+
+def test_multiline_hindi_headers_keep_name_and_dates_in_their_columns():
+    words = [
+        w("वेतनवृद्धि आदेश", 0.05, 0.05),
+        w("कर्मचारी का नाम", 0.05, 0.3, 0.18),
+        w("पुराना मूल वेतन", 0.28, 0.3, 0.16),
+        w("प्रभावी दिनांक", 0.48, 0.3, 0.16),
+        w("नया मूल वेतन", 0.7, 0.3, 0.2),
+        w("राम लाल", 0.05, 0.4),
+        w("27000/-", 0.28, 0.4),
+        w("01.07.2031", 0.48, 0.4),
+        w("27800/-", 0.7, 0.4),
+    ]
+    row = extract(words)[0]
+    assert row["employee_name"] == "राम लाल"
+    assert row["basic_amount"] == "27800.00"
+    assert row["effective_from"] == "2031-07-01"
+
+
+def test_ambiguous_narrative_employees_never_assigned_shared_values():
+    words = [
+        w("Increment Order", 0.05, 0.05),
+        w("Employee Name", 0.05, 0.2),
+        w("राम लाल", 0.3, 0.2),
+        w("Employee Name", 0.05, 0.25),
+        w("श्याम लाल", 0.3, 0.25),
+        w("New Basic", 0.05, 0.4),
+        w("27800/-", 0.3, 0.4),
+        w("Effective From", 0.05, 0.5),
+        w("01.07.2031", 0.3, 0.5),
+    ]
+    assert extract(words) == []
+
+
+def test_marker_only_order_remains_source_bound_review_candidate():
+    from ifms_suite import pay_orders
+
+    extractor = getattr(pay_orders, "extract_order_candidates", None)
+    assert callable(extractor)
+    words = [
+        w("वेतनवृद्धि आदेश", 0.05, 0.05),
+        w("01.07.2031", 0.2, 0.4),
+        w("27800/-", 0.7, 0.4),
+    ]
+    row = extractor([dict(page=8, words=words)])[0]
+    assert row["effective_from"] == ""
+    assert row["basic_amount"] is None
+    assert row["employee_code"] == ""
+    assert not row["complete"]
+    assert row["evidence"] == [dict(word, page=8) for word in words]
+
+
+def test_complete_orders_are_not_duplicated_as_review_candidates():
+    from ifms_suite import pay_orders
+
+    extractor = getattr(pay_orders, "extract_order_candidates", None)
+    assert callable(extractor)
+    assert extractor([dict(page=7, words=table())]) == []

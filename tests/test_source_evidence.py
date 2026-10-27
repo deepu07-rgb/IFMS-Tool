@@ -209,3 +209,26 @@ def test_new_extraction_archives_stale_field_reviews(monkeypatch):
     assert payload["superseded_bill_field_reviews"][0]["reviews"] == [
         {"request_id": "old"}
     ]
+
+
+def test_changed_extraction_archives_case_decisions(monkeypatch):
+    from ifms_suite.source_evidence import source_facts
+    from ifms_suite import document_facts
+
+    data = b"original"
+    digest = hashlib.sha256(data).hexdigest()
+    payload = {
+        "machine_facts": {},
+        "machine_facts_version": "old",
+        "order_reviews": [{"request_id": "old"}],
+        "reference_page_reviews": [{"page": 1}],
+        "source_bill_reviews": [{"request_id": "old"}],
+    }
+    monkeypatch.setattr(
+        document_facts, "extract_document_facts", lambda _: {"bills": []}
+    )
+    source_facts(data, digest, payload)
+    assert payload["order_reviews"] == []
+    assert payload["reference_page_reviews"] == []
+    assert payload["source_bill_reviews"] == []
+    assert payload["superseded_case_reviews"]

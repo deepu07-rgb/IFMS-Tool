@@ -393,7 +393,14 @@ def register_automatic_hra(suite):
                 or current_source["status"] != source["status"]
             ):
                 raise ValueError("Import changed during extraction; reload it")
-            for key in ("bill_field_reviews", "superseded_bill_field_reviews"):
+            for key in (
+                "bill_field_reviews",
+                "superseded_bill_field_reviews",
+                "order_reviews",
+                "reference_page_reviews",
+                "source_bill_reviews",
+                "superseded_case_reviews",
+            ):
                 if key in original:
                     latest[key] = original[key]
             latest.update(machine_facts=facts, machine_facts_version=FACTS_VERSION)

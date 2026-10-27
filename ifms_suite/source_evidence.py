@@ -17,18 +17,39 @@ def source_facts(data, digest, payload, refresh=False):
         or payload.get("machine_facts") is None
         or payload.get("machine_facts_version") != document_facts.FACTS_VERSION
     ):
-        fresh = document_facts.extract_document_facts(data)
-        if (
+        fresh = deepcopy(document_facts.extract_document_facts(data))
+        fresh.setdefault("facts_version", document_facts.FACTS_VERSION)
+        changed = (
             fresh != payload.get("machine_facts")
             or payload.get("machine_facts_version") != document_facts.FACTS_VERSION
-        ) and payload.get("bill_field_reviews"):
-            payload.setdefault("superseded_bill_field_reviews", []).append(
-                {
-                    "facts_version": payload.get("machine_facts_version"),
-                    "reviews": deepcopy(payload["bill_field_reviews"]),
-                }
-            )
-            payload["bill_field_reviews"] = []
+        )
+        if changed:
+            if payload.get("bill_field_reviews"):
+                payload.setdefault("superseded_bill_field_reviews", []).append(
+                    {
+                        "facts_version": payload.get("machine_facts_version"),
+                        "reviews": deepcopy(payload["bill_field_reviews"]),
+                    }
+                )
+                payload["bill_field_reviews"] = []
+            archive = {
+                key: deepcopy(payload[key])
+                for key in (
+                    "order_reviews",
+                    "reference_page_reviews",
+                    "source_bill_reviews",
+                )
+                if payload.get(key)
+            }
+            if archive:
+                payload.setdefault("superseded_case_reviews", []).append(
+                    dict(
+                        facts_version=payload.get("machine_facts_version"),
+                        reviews=archive,
+                    )
+                )
+                for key in archive:
+                    payload[key] = []
         payload["machine_facts"] = fresh
         payload["machine_facts_version"] = document_facts.FACTS_VERSION
     return deepcopy(payload["machine_facts"])
