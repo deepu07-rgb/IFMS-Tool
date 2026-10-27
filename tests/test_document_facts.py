@@ -347,3 +347,231 @@ def test_conflicting_header_identities_cannot_inherit_previous_employee():
     result = facts_from_pages([first, second])
     assert result["bills"][0]["source_pages"] == [1]
     assert not result["bills"][0]["complete"]
+
+
+def _simple_bill_words():
+    return header() + [
+        w("October", 0.05, 0.6),
+        w("2031", 0.05, 0.62),
+        w("Regular", 0.115, 0.6),
+        w("987654321", 0.172, 0.6),
+        w("Basic", 0.31, 0.58),
+        w("18000.00", 0.37, 0.58),
+        w("18000.00", 0.56, 0.58),
+    ]
+
+
+def test_zero_confidence_financial_facts_cannot_be_complete_or_accepted():
+    words = _simple_bill_words()
+    for word in words:
+        word["confidence"] = 0
+    result = facts_from_pages([page(words)])
+    assert not result["bills"][0]["complete"]
+    order = [
+        w("HOUSE", 0.8, 0.2),
+        w("RENT", 0.8, 0.22),
+        w("RJAB203012345678", 0.35, 0.4),
+        w("07.11.2031", 0.8, 0.405),
+        w("18%", 0.9, 0.407),
+    ]
+    for word in order:
+        word["confidence"] = 0
+    result = facts_from_pages([page(order)])
+    assert not result["orders"]
+    assert result["issues"][0]["blocking"] is True
+    assert any(
+        q.get("employee_code") == "RJAB203012345678" and q.get("blocking") is True
+        for q in result["issues"]
+    )
+
+
+def test_each_critical_bill_field_requires_confident_recognition():
+    for text in (
+        "RJAB203012345678",
+        "October",
+        "2031",
+        "987654321",
+        "Basic",
+        "18000.00",
+    ):
+        words = _simple_bill_words()
+        for word in words:
+            if word["text"] == text:
+                word["confidence"] = 0.1
+        assert not facts_from_pages([page(words)])["bills"][0]["complete"], text
+
+
+def test_valid_high_confidence_money_conflict_blocks_reconciled_bill():
+    words = _simple_bill_words()
+    amount = next(q for q in words if q["text"] == "18000.00" and q["box"][0] < 0.5)
+    amount["recognition_conflict"] = True
+    amount["recognition_candidates"] = [
+        dict(text="18000.00", confidence=0.99, recognizer="rapidocr"),
+        dict(text="19000.00", confidence=0.95, recognizer="tesseract"),
+    ]
+    result = facts_from_pages([page(words)])
+    assert not result["bills"][0]["complete"]
+    assert any("conflict" in str(i).lower() for i in result["issues"])
+
+
+def test_printed_deductions_and_net_are_retained_and_reconciled():
+    words = _simple_bill_words() + [
+        w("Total Deductions", 0.72, 0.2),
+        w("Net", 0.86, 0.2),
+        w("1000.00", 0.72, 0.58),
+        w("17000.00", 0.86, 0.58),
+    ]
+    bill = facts_from_pages([page(words)])["bills"][0]
+    assert bill["printed_deductions"] == "1000.00"
+    assert bill["printed_net"] == "17000.00"
+    assert bill["net_reconciled"] is True
+    assert bill["complete"]
+
+
+def test_contradictory_or_unreadable_printed_net_cannot_be_complete():
+    for net in ("16000.00", "17?00.00"):
+        words = _simple_bill_words() + [
+            w("Total Deductions", 0.72, 0.2),
+            w("Net", 0.86, 0.2),
+            w("1000.00", 0.72, 0.58),
+            w(net, 0.86, 0.58),
+        ]
+        result = facts_from_pages([page(words)])
+        assert not result["bills"][0]["complete"]
+        assert result["issues"][-1]["blocking"] is True
+        assert result["issues"][-1]["employee_code"] == "RJAB203012345678"
+
+
+def test_recognizer_money_disagreement_is_retained_and_needs_crop_confirmation():
+    from ifms_suite.document_facts import _merge_candidates, _resolve_crop_candidates
+
+    primary = dict(w("18000.00", 0.3, 0.4), recognizer="rapidocr", confidence=0.98)
+    other = dict(w("19000.00", 0.3, 0.4), recognizer="tesseract", confidence=0.95)
+    _merge_candidates(primary, [other], "money")
+    assert primary["recognition_conflict"]
+    assert {q["text"] for q in primary["recognition_candidates"]} == {
+        "18000.00",
+        "19000.00",
+    }
+    _resolve_crop_candidates(
+        primary,
+        [dict(text="19000.00", recognizer="tesseract-crop", confidence=0.93)],
+        "money",
+    )
+    assert primary["text"] == "19000.00"
+    assert not primary["recognition_conflict"]
+    assert primary["conflict_resolved_by"]
+
+
+def test_disagreeing_reliable_crops_preserve_the_money_blocker():
+    from ifms_suite.document_facts import _merge_candidates, _resolve_crop_candidates
+
+    primary = dict(w("18000.00", 0.3, 0.4), recognizer="rapidocr", confidence=0.98)
+    _merge_candidates(
+        primary,
+        [dict(text="19000.00", recognizer="tesseract", confidence=0.95)],
+        "money",
+    )
+    _resolve_crop_candidates(
+        primary,
+        [
+            dict(text="18000.00", recognizer="rapidocr-crop", confidence=0.96),
+            dict(text="19000.00", recognizer="tesseract-crop", confidence=0.93),
+        ],
+        "money",
+    )
+    assert primary["recognition_conflict"]
+
+
+def test_identity_and_period_reliability_are_separate_from_money_reconciliation():
+    words = _simple_bill_words()
+    next(q for q in words if q["text"] == "October")["confidence"] = 0.1
+    bill = facts_from_pages([page(words)])["bills"][0]
+    assert bill["identity_reliable"] is True
+    assert bill["period_reliable"] is False
+
+
+def test_unclassified_financial_page_blocks_but_reference_form_is_identified():
+    result = facts_from_pages(
+        [
+            page(_simple_bill_words()),
+            page([w("Increment fixation order", 0.1, 0.1)], 2),
+            page([w("PAY TO BE DRAWN", 0.1, 0.2), w("PAY ALREADY DRAWN", 0.5, 0.2)], 3),
+        ]
+    )
+    assert [q["kind"] for q in result["page_classifications"]] == [
+        "ga55",
+        "unclassified",
+        "reference_statement",
+    ]
+    assert any(
+        q.get("blocking") is True
+        and q.get("scope") == "document"
+        and q.get("page") == 2
+        for q in result["issues"]
+    )
+
+
+def test_low_confidence_continuation_identity_cannot_complete_previous_bill():
+    first = page(
+        header()
+        + [
+            w("October", 0.05, 0.8),
+            w("2031", 0.05, 0.815),
+            w("123456789", 0.18, 0.8),
+            w("Basic", 0.31, 0.78),
+            w("18000.00", 0.37, 0.78),
+            w("18300.00", 0.56, 0.78),
+        ]
+    )
+    words = header() + [w("HDA", 0.31, 0.25), w("300.00", 0.37, 0.25)]
+    next(q for q in words if q["text"] == "RJAB203012345678")["confidence"] = 0.1
+    result = facts_from_pages([first, page(words, 2)])
+    assert not result["bills"][0]["complete"]
+    assert result["bills"][0]["source_pages"] == [1]
+
+
+def test_empty_scanned_recognition_is_a_typed_document_blocker(monkeypatch):
+    import io, sys
+    from types import SimpleNamespace
+    import pymupdf
+    from PIL import Image
+    from ifms_suite import document_facts, documents
+
+    monkeypatch.setitem(
+        sys.modules,
+        "rapidocr_onnxruntime",
+        SimpleNamespace(RapidOCR=lambda **kwargs: object()),
+    )
+    monkeypatch.setattr(documents, "ocr_runtime", lambda: None)
+    monkeypatch.setattr(document_facts, "_recognize_page", lambda *args: [])
+    encoded = io.BytesIO()
+    Image.new("RGB", (100, 100), "white").save(encoded, "PNG")
+    with pymupdf.open() as pdf:
+        p = pdf.new_page(width=100, height=100)
+        p.insert_image(p.rect, stream=encoded.getvalue())
+        result = document_facts.extract_document_facts(pdf.tobytes())
+    assert any(
+        q.get("kind") == "page_recognition"
+        and q.get("scope") == "document"
+        and q.get("blocking") is True
+        for q in result["issues"]
+    )
+
+
+def test_low_confidence_bill_type_and_order_fields_remain_unresolved():
+    words = _simple_bill_words()
+    next(q for q in words if q["text"] == "Regular")["confidence"] = 0.1
+    assert not facts_from_pages([page(words)])["bills"][0]["complete"]
+    for text in ("07.11.2031", "18%"):
+        words = [
+            w("HOUSE", 0.8, 0.2),
+            w("RENT", 0.8, 0.22),
+            w("RJAB203012345678", 0.35, 0.4),
+            w("07.11.2031", 0.8, 0.405),
+            w("18%", 0.9, 0.407),
+        ]
+        next(q for q in words if q["text"] == text)["confidence"] = 0.1
+        result = facts_from_pages([page(words)])
+        assert not result["orders"]
+        assert result["issues"][-1]["blocking"] is True

@@ -13,7 +13,11 @@ from datetime import date
 from decimal import Decimal
 from statistics import median
 
-FACTS_VERSION = "geometry-printed-v2"
+FACTS_VERSION = "geometry-printed-v3"
+
+# Fixed recognition gates are independent of reconciliation and expected totals.
+NEURAL_CONFIDENCE = 0.85
+TESSERACT_CONFIDENCE = 0.80
 
 MONTHS = "January February March April May June July August September October November December".split()
 ID = re.compile(r"RJ[A-Z]{2}\d{12}")
@@ -51,9 +55,48 @@ def _evidence(word, page):
     return dict(word, page=page)
 
 
+def _reliable(word):
+    threshold = (
+        TESSERACT_CONFIDENCE
+        if word.get("recognizer", "").startswith("tesseract")
+        else NEURAL_CONFIDENCE
+    )
+    return word.get("confidence", 0) >= threshold and not word.get(
+        "recognition_conflict", False
+    )
+
+
+def _recognition_flags(words):
+    return [
+        (
+            "Recognition conflict: "
+            if w.get("recognition_conflict")
+            else "Low confidence: "
+        )
+        + w["text"]
+        for w in words
+        if not _reliable(w)
+    ]
+
+
 def _identity(words):
     ids = [_text(w) for w in words if ID.fullmatch(_text(w))]
     return ids[0] if len(set(ids)) == 1 else ""
+
+
+def _classify_page(words):
+    trusted = "".join(_text(w) for w in words if _reliable(w))
+    if "GA55" in trusted or ("ALLOWANCES" in trusted and "GROSS" in trusted):
+        return "ga55"
+    if (
+        "HOUSE" in trusted
+        and "RENT" in trusted
+        and any(ID.fullmatch(_text(w)) for w in words)
+    ):
+        return "hra_order"
+    if "PAYTOBEDRAWN" in trusted and "PAYALREADYDRAWN" in trusted:
+        return "reference_statement"
+    return "unclassified" if words else "blank"
 
 
 def _heads(words, page, start, end, left, right):
@@ -89,6 +132,7 @@ def _heads(words, page, start, end, left, right):
             issues.append("Unreadable amount for " + head)
             continue
         value = candidates[0]
+        issues.extend(_recognition_flags([label, value]))
         if head in result:
             issues.append("Repeated allowance " + head)
         else:
@@ -103,9 +147,37 @@ def _heads(words, page, start, end, left, right):
 
 
 def _page_key(words):
-    fy = next((_text(w) for w in words if re.fullmatch(r"20\d{2}-\d{2}", _text(w))), "")
-    group = next((_text(w) for w in words if _text(w).startswith("GROUPNAME:")), "")
+    fy = next(
+        (
+            _text(w)
+            for w in words
+            if _reliable(w) and re.fullmatch(r"20\d{2}-\d{2}", _text(w))
+        ),
+        "",
+    )
+    group = next(
+        (_text(w) for w in words if _reliable(w) and _text(w).startswith("GROUPNAME:")),
+        "",
+    )
     return fy, group
+
+
+def _printed_total(words, gross, geometry, name, page):
+    """Read an optional printed total at the gross baseline, retaining failure."""
+    if geometry is None:
+        return None, [], []
+    left, right = geometry
+    candidates = [
+        w
+        for w in words
+        if left <= w["box"][0] < right
+        and abs(_y(w) - _y(gross)) < 0.015
+        and _money(w["text"]) is not None
+    ]
+    if len(candidates) != 1:
+        return None, [], ["Printed " + name + " unreadable or ambiguous"]
+    value = candidates[0]
+    return _money(value["text"]), [_evidence(value, page)], _recognition_flags([value])
 
 
 def facts_from_pages(pages):
@@ -114,11 +186,25 @@ def facts_from_pages(pages):
     orders = []
     issues = []
     layout = None
+    payment_layout = (None, None)
     previous = None
+    classifications = []
     for page in pages:
         words = page["words"]
         number = page["page"]
         compact = " ".join(_text(w) for w in words)
+        classification = _classify_page(words)
+        classifications.append(dict(page=number, kind=classification))
+        if classification == "unclassified":
+            issues.append(
+                dict(
+                    page=number,
+                    kind="unsupported_page",
+                    scope="document",
+                    blocking=True,
+                    issue="Unclassified nonblank page; financial instructions and adjustments require resolution",
+                )
+            )
         header_identities = [
             w for w in words if w["box"][1] < 0.23 and ID.fullmatch(_text(w))
         ]
@@ -128,6 +214,43 @@ def facts_from_pages(pages):
             allowance = next((w for w in words if _text(w) == "ALLOWANCES"), None)
             gross_header = next((w for w in words if _text(w) == "GROSS"), None)
             if allowance and gross_header:
+                net_header = next(
+                    (
+                        w
+                        for w in words
+                        if _text(w) == "NET" and abs(_y(w) - _y(gross_header)) < 0.04
+                    ),
+                    None,
+                )
+                deduction_header = next(
+                    (
+                        w
+                        for w in words
+                        if (
+                            _text(w) == "TOTAL"
+                            or _text(w).startswith("TOTALDEDUCTIONS")
+                        )
+                        and abs(_y(w) - _y(gross_header)) < 0.04
+                        and w["box"][0] > gross_header["box"][0]
+                        and (not net_header or w["box"][0] < net_header["box"][0])
+                    ),
+                    None,
+                )
+                payment_layout = (
+                    (
+                        (
+                            deduction_header["box"][0] - 0.025,
+                            (
+                                net_header["box"][0] - 0.025
+                                if net_header
+                                else deduction_header["box"][2] + 0.05
+                            ),
+                        )
+                        if deduction_header
+                        else None
+                    ),
+                    (net_header["box"][0] - 0.025, 1) if net_header else None,
+                )
                 # Two label/value lanes; discover label starts from observed heads.
                 labels = sorted(
                     w["box"][0]
@@ -147,7 +270,13 @@ def facts_from_pages(pages):
                     )
             if not layout:
                 issues.append(
-                    {"page": number, "issue": "Allowance column geometry unresolved"}
+                    {
+                        "page": number,
+                        "issue": "Allowance column geometry unresolved",
+                        "kind": "layout_unresolved",
+                        "blocking": True,
+                        "scope": "document",
+                    }
                 )
                 previous = None
                 continue
@@ -176,6 +305,7 @@ def facts_from_pages(pages):
             if previous and carry_words:
                 same_identity = bool(
                     employee
+                    and all(_reliable(w) for w in header_identities)
                     and employee == previous["employee_code"]
                     and number == previous["source_pages"][-1] + 1
                 )
@@ -194,14 +324,24 @@ def facts_from_pages(pages):
                     )
                     if set(heads) & set(previous["allowances"]):
                         previous["_issues"].append("Repeated heads in continuation")
+                        previous["_allowance_flags"].append(
+                            "Repeated heads in continuation"
+                        )
                     else:
                         previous["allowances"].update(heads)
                         previous["evidence"].extend(ev)
                         previous["_issues"].extend(flags)
+                        previous["_allowance_flags"].extend(flags)
                         previous["source_pages"].append(number)
                 else:
                     issues.append(
-                        {"page": number, "issue": "Continuation identity unresolved"}
+                        {
+                            "page": number,
+                            "issue": "Continuation identity unresolved",
+                            "kind": "continuation_unresolved",
+                            "blocking": True,
+                            "scope": "document",
+                        }
                     )
             inherited_employee = employee
             identity_evidence = [
@@ -251,26 +391,81 @@ def facts_from_pages(pages):
                     else ""
                 )
                 heads, ev, flags = _heads(words, number, start, end, left, right)
-                type_words = [
-                    w["text"]
+                flags.extend(
+                    _recognition_flags(
+                        identity_evidence
+                        + [gross]
+                        + ([month] if month else [])
+                        + bill_words
+                        + years
+                    )
+                )
+                allowance_flags = list(flags)
+                deductions, deductions_ev, deductions_flags = _printed_total(
+                    words, gross, payment_layout[0], "deductions", number
+                )
+                net, net_ev, net_flags = _printed_total(
+                    words, gross, payment_layout[1], "net", number
+                )
+                flags.extend(deductions_flags + net_flags)
+                net_reconciled = None
+                if any(payment_layout):
+                    net_reconciled = bool(
+                        deductions is not None
+                        and net is not None
+                        and not deductions_flags
+                        and not net_flags
+                        and Decimal(_money(gross["text"])) - Decimal(deductions)
+                        == Decimal(net)
+                    )
+                    if not net_reconciled:
+                        flags.append(
+                            "Printed gross, deductions and net do not reconcile"
+                        )
+                type_labels = [
+                    w
                     for w in region
                     if 0.10 < w["box"][0] < 0.16 and not re.fullmatch(r"\d+", w["text"])
                 ]
-                kind = " ".join(type_words)
+                flags.extend(_recognition_flags(type_labels))
+                if not type_labels:
+                    flags.append("Bill type unresolved")
+                kind = " ".join(w["text"] for w in type_labels)
                 if re.search(r"regul", kind, re.I):
                     kind = "Regular Salary"
                 bill = dict(
                     employee_code=inherited_employee,
                     pay_month=pay_month,
+                    identity_reliable=bool(
+                        inherited_employee
+                        and identity_evidence
+                        and all(_reliable(w) for w in identity_evidence)
+                    ),
+                    period_reliable=bool(
+                        pay_month
+                        and month
+                        and len(years) == 1
+                        and all(_reliable(w) for w in [month] + years)
+                    ),
                     bill_no=bill_words[0]["text"] if len(bill_words) == 1 else "",
                     bill_type=kind,
+                    bill_type_reliable=bool(
+                        type_labels and all(_reliable(w) for w in type_labels)
+                    ),
                     allowances=heads,
                     printed_gross=_money(gross["text"]),
+                    printed_deductions=deductions,
+                    printed_net=net,
+                    net_reconciled=net_reconciled,
+                    allowances_complete=False,
                     complete=False,
                     source_pages=[number],
                     evidence=ev
+                    + deductions_ev
+                    + net_ev
                     + [_evidence(gross, number)]
                     + identity_evidence
+                    + [_evidence(w, number) for w in type_labels]
                     + [
                         _evidence(w, number)
                         for w in ([month] if month else [])
@@ -283,6 +478,7 @@ def facts_from_pages(pages):
                         ]
                     ],
                     _issues=flags,
+                    _allowance_flags=allowance_flags,
                     _page_key=_page_key(words),
                 )
                 bills.append(bill)
@@ -344,7 +540,29 @@ def facts_from_pages(pages):
             for w in identities:
                 dates = assigned_dates.get(id(w), [])
                 rates = assigned_rates.get(id(w), [])
-                if len(dates) == 1 and len(rates) == 1:
+                unresolved_fields = []
+                if not _reliable(w):
+                    unresolved_fields.append("employee_code")
+                if len(dates) != 1 or not all(_reliable(d[1]) for d in dates):
+                    unresolved_fields.append("effective_from")
+                if len(rates) != 1 or not all(_reliable(r[1]) for r in rates):
+                    unresolved_fields.append("rate")
+                rate_x = (
+                    median(q[1]["box"][0] for q in rate_words) if rate_words else None
+                )
+                unreadable_rates = [
+                    q
+                    for q in words
+                    if rate_x is not None
+                    and abs(q["box"][0] - rate_x) < 0.025
+                    and abs(_y(q) - slope * (q["box"][0] - w["box"][0]) - _y(w)) < 0.012
+                    and q not in [r[1] for r in rates]
+                ]
+                if (
+                    len(dates) == 1
+                    and len(rates) == 1
+                    and all(_reliable(q) for q in [w, dates[0][1], rates[0][1]])
+                ):
                     orders.append(
                         dict(
                             employee_code=_text(w),
@@ -364,11 +582,23 @@ def facts_from_pages(pages):
                             "page": number,
                             "employee_code": _text(w),
                             "issue": "Employee order date/rate unresolved",
-                            "evidence": [_evidence(w, number)],
+                            "kind": "order_unresolved",
+                            "allowance": "HRA",
+                            "scope": "employee",
+                            "blocking": True,
+                            "unresolved_fields": unresolved_fields,
+                            "evidence": [
+                                _evidence(q, number)
+                                for q in [w]
+                                + unreadable_rates
+                                + [d[1] for d in dates]
+                                + [r[1] for r in rates]
+                            ],
                         }
                     )
     for bill in bills:
         flags = bill.pop("_issues")
+        allowance_flags = bill.pop("_allowance_flags")
         bill.pop("_page_key", None)
         reconciled = sum(
             map(Decimal, bill["allowances"].values()), Decimal(0)
@@ -376,6 +606,13 @@ def facts_from_pages(pages):
         bill["complete"] = bool(
             reconciled
             and not flags
+            and bill["employee_code"]
+            and bill["pay_month"]
+            and bill["bill_no"]
+        )
+        bill["allowances_complete"] = bool(
+            reconciled
+            and not allowance_flags
             and bill["employee_code"]
             and bill["pay_month"]
             and bill["bill_no"]
@@ -394,9 +631,16 @@ def facts_from_pages(pages):
                     "bill_no": bill["bill_no"],
                     "source_pages": bill["source_pages"],
                     "issues": flags,
+                    "kind": "bill_unresolved",
+                    "scope": "bill",
+                    "blocking": True,
+                    "employee_code": bill["employee_code"],
+                    "pay_month": bill["pay_month"],
                 }
             )
-    return dict(bills=bills, orders=orders, issues=issues)
+    return dict(
+        bills=bills, orders=orders, issues=issues, page_classifications=classifications
+    )
 
 
 def _tesseract_words(image, executable, env, psm=3):
@@ -456,8 +700,199 @@ def _overlaps(a, b):
     return area > min((bx - ax) * (by - ay), (dx - cx) * (dy - cy)) * 0.35
 
 
-def _recognize_page(page, recognizer, runtime):
+def _critical_kind(word, is_order=False, rate_x=None):
+    text = word["text"]
+    if _money(text) is not None or (
+        re.fullmatch(r"[+-]?[\d,.:]+", text) and re.search(r"[.,:]\d{2}$", text)
+    ):
+        return "money"
+    if ID.fullmatch(_text(word)) or re.fullmatch(r"[A-Z]{2,5}\d{10,13}", _text(word)):
+        return "identity"
+    if text in MONTHS:
+        return "month"
+    if _head(word):
+        return "head"
+    if re.fullmatch(r"20\d{2}", text) and word["box"][0] < 0.12:
+        return "year"
+    if re.fullmatch(r"\d{9}", text):
+        return "bill"
+    if is_order and re.fullmatch(r"\d{2}[./:]\d{2}[./:]\d{4}", text):
+        return "date"
+    if is_order and (
+        re.fullmatch(r"\d{1,2}%", _text(word))
+        or (
+            rate_x is not None
+            and abs(word["box"][0] - rate_x) < 0.025
+            and re.search(r"\d", text)
+        )
+    ):
+        return "rate"
+    return None
+
+
+def _candidate_value(word, kind):
+    text = word["text"].strip()
+    if kind == "money":
+        return _money(text)
+    if kind == "identity":
+        return _text(word) if ID.fullmatch(_text(word)) else None
+    if kind == "month":
+        return text if text in MONTHS else None
+    if kind == "head":
+        return _head(word)
+    if kind == "year":
+        return text if re.fullmatch(r"20\d{2}", text) else None
+    if kind == "bill":
+        return text if re.fullmatch(r"\d{9}", text) else None
+    if kind == "rate":
+        return _text(word) if re.fullmatch(r"\d{1,2}%", _text(word)) else None
+    if kind == "date":
+        m = re.fullmatch(r"(\d{2})[./:](\d{2})[./:](\d{4})", text)
+        if m:
+            try:
+                return date(int(m[3]), int(m[2]), int(m[1])).isoformat()
+            except ValueError:
+                pass
+    return None
+
+
+def _candidate_copy(word):
+    return {
+        k: v
+        for k, v in word.items()
+        if k
+        in (
+            "text",
+            "box",
+            "confidence",
+            "recognizer",
+            "crop_box",
+            "crop_dpi",
+            "preprocessing",
+        )
+    }
+
+
+def _merge_candidates(primary, others, kind):
+    candidates = primary.setdefault(
+        "recognition_candidates", [_candidate_copy(primary)]
+    )
+    for q in others:
+        item = _candidate_copy(q)
+        if item not in candidates:
+            candidates.append(item)
+    trusted = {
+        _candidate_value(q, kind)
+        for q in candidates
+        if _reliable(q) and _candidate_value(q, kind) is not None
+    }
+    primary["recognition_conflict"] = len(trusted) > 1
+
+
+def _resolve_crop_candidates(word, crops, kind):
+    word.setdefault("recognition_candidates", [_candidate_copy(word)])
+    word["recognition_candidates"].extend(_candidate_copy(q) for q in crops)
+    reliable = [
+        q for q in crops if _reliable(q) and _candidate_value(q, kind) is not None
+    ]
+    values = {_candidate_value(q, kind) for q in reliable}
+    if len(values) > 1:
+        word["recognition_conflict"] = True
+        return
+    if len(values) != 1:
+        return
+    value = next(iter(values))
+    originals = {
+        _candidate_value(q, kind)
+        for q in word["recognition_candidates"]
+        if not q.get("recognizer", "").endswith("-crop")
+        and _candidate_value(q, kind) is not None
+    }
+    if word.get("recognition_conflict") and value not in originals:
+        return
+    chosen = max(reliable, key=lambda q: q["confidence"])
+    if word.get("recognition_conflict"):
+        word["conflict_resolved_by"] = [_candidate_copy(q) for q in reliable]
+    word.setdefault("original_text", word["text"])
+    word.update(
+        text=chosen["text"],
+        confidence=chosen["confidence"],
+        recognizer=chosen["recognizer"],
+        recognition_conflict=False,
+    )
+
+
+def _crop_candidates(page, word, recognizer, runtime, images=None):
+    """Fixed crops at two source resolutions; no total or answer feedback."""
     from PIL import Image, ImageOps
+
+    images = images if images is not None else {}
+    candidates = []
+    x1, y1, x2, y2 = word["box"]
+    for dpi, scale, preprocessing in [
+        (200, 3, "gray autocontrast"),
+        (300, 2, "gray autocontrast"),
+    ]:
+        if dpi not in images:
+            pix = page.get_pixmap(dpi=dpi)
+            images[dpi] = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        image = images[dpi]
+        box = [
+            max(0, x1 * image.width - 4),
+            max(0, y1 * image.height - 4),
+            min(image.width, x2 * image.width + 4),
+            min(image.height, y2 * image.height + 4),
+        ]
+        original = image.crop(box)
+        gray = ImageOps.autocontrast(
+            ImageOps.grayscale(
+                original.resize((original.width * scale, original.height * scale))
+            )
+        )
+        metadata = dict(
+            crop_box=box,
+            crop_dpi=dpi,
+            crop_coordinate_space="rendered pixels",
+            preprocessing=preprocessing + "; scale " + str(scale),
+        )
+        if runtime:
+            recognized = _tesseract_words(gray, *runtime[:2], psm=7)
+            candidates.append(
+                dict(
+                    text="".join(q["text"] for q in recognized),
+                    confidence=min((q["confidence"] for q in recognized), default=0),
+                    recognizer="tesseract-crop",
+                    **metadata,
+                )
+            )
+        if recognizer:
+            # The neural recognizer receives source RGB at200dpi and the
+            # prepared crop at300dpi, independent of Tesseract recognition.
+            neural = original if dpi == 200 else gray
+            encoded = io.BytesIO()
+            neural.save(encoded, format="PNG")
+            raw, _ = recognizer(encoded.getvalue(), use_det=False, use_cls=False)
+            if raw and len(raw) == 1:
+                candidates.append(
+                    dict(
+                        text=raw[0][0],
+                        confidence=float(raw[0][1]),
+                        recognizer="rapidocr-crop",
+                        **dict(
+                            metadata,
+                            preprocessing=(
+                                "source RGB"
+                                if dpi == 200
+                                else metadata["preprocessing"]
+                            ),
+                        ),
+                    )
+                )
+    return candidates
+
+
+def _recognize_page(page, recognizer, runtime):
+    from PIL import Image
 
     pix = page.get_pixmap(dpi=200)
     image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -478,88 +913,40 @@ def _recognize_page(page, recognizer, runtime):
                     recognizer="rapidocr",
                 )
             )
-    if runtime:
-        executable, env, _ = runtime
-        secondary = _tesseract_words(image, executable, env)
-        if not words:
-            words = secondary
-        else:
-            # Independent semantic labels may fill an undetected label. Monetary
-            # disagreements never cause substitution of an already valid amount.
-            for w in secondary:
-                semantic = _head(w) or w["text"] in MONTHS or ID.fullmatch(_text(w))
-                overlapping = [q for q in words if _overlaps(w, q)]
-                if semantic and not any(
-                    _head(q) or q["text"] in MONTHS or ID.fullmatch(_text(q))
-                    for q in overlapping
-                ):
-                    words.append(w)
-        compact = " ".join(_text(w) for w in words)
-        is_order = "HOUSE" in compact and "RENT" in compact
-        rate_x = (
-            median([w["box"][0] for w in words if re.fullmatch(r"\d{1,2}%", _text(w))])
-            if is_order and any(re.fullmatch(r"\d{1,2}%", _text(w)) for w in words)
-            else None
-        )
-        for word in list(words):
-            text = word["text"]
-            malformed_money = bool(
-                re.fullmatch(r"[+-]?[\d,.:]+", text)
-                and re.search(r"[.,:]\d{2}$", text)
-                and _money(text) is None
-            )
-            malformed_id = bool(
-                re.fullmatch(r"[A-Z]{2,5}\d{10,13}", _text(word))
-                and not ID.fullmatch(_text(word))
-            )
-            malformed_rate = bool(
-                rate_x is not None
-                and abs(word["box"][0] - rate_x) < 0.025
-                and not re.fullmatch(r"\d{1,2}%", _text(word))
-                and re.search(r"\d", text)
-            )
-            if not (malformed_money or malformed_id or malformed_rate):
+    secondary = _tesseract_words(image, *runtime[:2]) if runtime else []
+    if not words:
+        words = secondary
+    compact = " ".join(_text(w) for w in words)
+    is_order = "HOUSE" in compact and "RENT" in compact
+    rates = [w["box"][0] for w in words if re.fullmatch(r"\d{1,2}%", _text(w))]
+    rate_x = median(rates) if is_order and rates else None
+    if recognizer and secondary:
+        for candidate in secondary:
+            kind = _critical_kind(candidate, is_order, rate_x)
+            if not kind:
                 continue
-            x1, y1, x2, y2 = word["box"]
-            crop = image.crop(
-                (
-                    max(0, x1 * pix.width - 4),
-                    max(0, y1 * pix.height - 4),
-                    min(pix.width, x2 * pix.width + 4),
-                    min(pix.height, y2 * pix.height + 4),
+            overlapping = [
+                q
+                for q in words
+                if _overlaps(candidate, q)
+                and _critical_kind(q, is_order, rate_x) == kind
+            ]
+            if overlapping:
+                primary = max(
+                    overlapping,
+                    key=lambda q: min(q["box"][2], candidate["box"][2])
+                    - max(q["box"][0], candidate["box"][0]),
                 )
+                _merge_candidates(primary, [candidate], kind)
+            elif kind in ("head", "month", "identity"):
+                words.append(candidate)
+    images = {200: image}
+    for word in words:
+        kind = _critical_kind(word, is_order, rate_x)
+        if kind and (_candidate_value(word, kind) is None or not _reliable(word)):
+            _resolve_crop_candidates(
+                word, _crop_candidates(page, word, recognizer, runtime, images), kind
             )
-            original_crop = crop
-            crop = ImageOps.autocontrast(
-                ImageOps.grayscale(crop.resize((crop.width * 3, crop.height * 3)))
-            )
-            recognized = _tesseract_words(crop, executable, env, psm=7)
-            candidate = "".join(w["text"] for w in recognized)
-            valid = (
-                _money(candidate) is not None
-                if malformed_money
-                else (
-                    bool(ID.fullmatch(candidate))
-                    if malformed_id
-                    else bool(re.fullmatch(r"\d{1,2}%", candidate))
-                )
-            )
-            crop_recognizer = "tesseract-crop"
-            confidence = min((w["confidence"] for w in recognized), default=0)
-            if not valid and malformed_money and recognizer:
-                encoded = io.BytesIO()
-                original_crop.save(encoded, format="PNG")
-                raw, _ = recognizer(encoded.getvalue(), use_det=False, use_cls=False)
-                if raw and len(raw) == 1 and _money(raw[0][0]) is not None:
-                    candidate = raw[0][0]
-                    confidence = float(raw[0][1])
-                    valid = True
-                    crop_recognizer = "rapidocr-crop"
-            if valid:
-                word["original_text"] = text
-                word["text"] = candidate
-                word["recognizer"] = crop_recognizer
-                word["confidence"] = confidence
     return words
 
 
@@ -585,30 +972,51 @@ def extract_document_facts(pdf_bytes):
             except Exception as error:
                 recognition_issues.append(
                     {
-                        "issue": f"Independent printed recognizer unavailable ({type(error).__name__}); using Tesseract"
+                        "issue": f"Independent printed recognizer unavailable ({type(error).__name__}); using Tesseract",
+                        "kind": "recognizer_unavailable",
+                        "blocking": False,
                     }
                 )
             try:
                 runtime = ocr_runtime()
             except ValueError:
                 recognition_issues.append(
-                    {"issue": "Tesseract unavailable for independent recognition"}
+                    {
+                        "issue": "Tesseract unavailable for independent recognition",
+                        "kind": "recognizer_unavailable",
+                        "blocking": False,
+                    }
                 )
         pages = []
+        failed_pages = []
+        recognizers = set()
         for number, page in enumerate(document, 1):
             if page_needs_ocr(page):
                 if not recognizer and not runtime:
+                    failed_pages.append(dict(page=number, kind="unreadable"))
                     recognition_issues.append(
-                        {"page": number, "issue": "No printed recognizer available"}
+                        {
+                            "page": number,
+                            "issue": "No printed recognizer available",
+                            "kind": "page_recognition",
+                            "scope": "document",
+                            "blocking": True,
+                        }
                     )
                     continue
                 try:
                     words = _recognize_page(page, recognizer, runtime)
+                    if not words:
+                        raise ValueError("No usable recognized words")
                 except Exception as error:
+                    failed_pages.append(dict(page=number, kind="unreadable"))
                     recognition_issues.append(
                         {
                             "page": number,
                             "issue": f"Printed page recognition unresolved ({type(error).__name__})",
+                            "kind": "page_recognition",
+                            "scope": "document",
+                            "blocking": True,
                         }
                     )
                     continue
@@ -627,8 +1035,13 @@ def extract_document_facts(pdf_bytes):
                     )
                     for w in page.get_text("words")
                 ]
+            recognizers.update(w.get("recognizer", "unknown") for w in words)
             pages.append(dict(page=number, words=words))
     facts = facts_from_pages(pages)
+    facts["page_classifications"] = sorted(
+        facts["page_classifications"] + failed_pages, key=lambda q: q["page"]
+    )
     facts["issues"].extend(recognition_issues)
     facts["facts_version"] = FACTS_VERSION
+    facts["recognizers"] = sorted(recognizers)
     return facts
