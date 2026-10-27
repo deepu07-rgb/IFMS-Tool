@@ -83,4 +83,6 @@ A narrow rate confirmation flow preserves raw OCR, source hash, review reference
 
 The full run before the final credit guard reported 257 passed, 14 skipped and 13 inherited failures in test_expected_totals.py. A fresh active regression run and final portable package verification are recorded in the completion update. Linux measurement does not establish the Windows installed size; CI must enforce the complete Windows budget.
 
-Final active regression: 257 passed, 14 skipped (legacy expected_totals excluded). Focused recovery tests: 83 passed. Strict browser: zero claims, one blank review field, no numeric/date inputs, approvals, external requests or JavaScript errors. Linux portable payload: 454,854,271 bytes with neural models; system Tesseract, not complete Windows measurement.
+Final active regression: 257 passed, 14 skipped (legacy expected_totals excluded). Focused recovery tests: 83 passed. Strict browser: zero claims, one blank review field, no numeric/date inputs, approvals, external requests or JavaScript errors. Linux portable payload: 454,854,338 bytes with neural models; system Tesseract, not complete Windows measurement.
+
+Source pushed as `9842c36` on `feat/unified-ifms`. Reviewer reproduced the prior-credit defect, then confirmed its regression test and fix. Final frozen smoke passed. Windows build: https://github.com/deepu07-rgb/IFMS-Tool/actions/runs/40485278959 (completion pending at documentation time).

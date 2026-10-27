@@ -40,7 +40,7 @@ Interface: reconcile_hra(facts,rates)->dict with draft calculations or explicit 
 - [x] Run active/full tests and actual UI/API acceptance; disclose inherited failures.
 - [x] Fresh independent review and fix blockers.
 - [x] Measure/build frozen package including any added libraries/models; do not claim Windows size without a successful gate.
-- [ ] Push source and preserve private frozen test evidence.
+- [x] Push source and preserve private frozen test evidence.
 
 ## Acceptance result
 The strict private PDF run remains blocked by one uncertain HRA percentage. No figures, dates or review approvals were entered. This is a successful uncertainty safeguard, not an unattended bill accuracy pass. Windows packaging is independently gated by CI after push.
