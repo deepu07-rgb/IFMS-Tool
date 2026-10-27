@@ -1,0 +1,74 @@
+"""Shared immutable-source extraction and review-compatible payment records."""
+
+from copy import deepcopy
+import hashlib
+from .payment_types import classify_bill, entitlement_type
+
+
+def source_facts(data, digest, payload, refresh=False):
+    from importlib import import_module
+
+    document_facts = import_module("ifms_suite.document_facts")
+
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError("Original source changed; reimport it")
+    if (
+        refresh
+        or payload.get("machine_facts") is None
+        or payload.get("machine_facts_version") != document_facts.FACTS_VERSION
+    ):
+        fresh = document_facts.extract_document_facts(data)
+        if (
+            fresh != payload.get("machine_facts")
+            or payload.get("machine_facts_version") != document_facts.FACTS_VERSION
+        ) and payload.get("bill_field_reviews"):
+            payload.setdefault("superseded_bill_field_reviews", []).append(
+                {
+                    "facts_version": payload.get("machine_facts_version"),
+                    "reviews": deepcopy(payload["bill_field_reviews"]),
+                }
+            )
+            payload["bill_field_reviews"] = []
+        payload["machine_facts"] = fresh
+        payload["machine_facts_version"] = document_facts.FACTS_VERSION
+    return deepcopy(payload["machine_facts"])
+
+
+def payment_candidates(facts):
+    records = []
+    for bill in facts.get("bills", []):
+        row = deepcopy(bill)
+        row.setdefault("deductions", {})
+        row.setdefault("allowances", {})
+        row.setdefault("entitlement_period", None)
+        row.setdefault("bill_type", "")
+        row["payment_class"] = classify_bill(row["bill_type"])
+        row["entitlement_type"] = entitlement_type(row)
+        row["issues"] = [
+            str(i.get("issue", i)) if isinstance(i, dict) else str(i)
+            for i in row.get("issues", [])
+        ]
+        if not row.get("complete"):
+            row["issues"].append(
+                "Source bill remains incomplete; check highlighted evidence"
+            )
+        if not row["deductions"]:
+            row["issues"].append(
+                "Deduction heads have not been extracted; verify against printed deductions and net"
+            )
+        row["issues"].append(
+            "Confirm source identity, dates, signs and component values before approving history"
+        )
+        row["raw_text"] = ""
+        records.append(row)
+    return dict(
+        payments=records,
+        extraction_status=(
+            "candidates_require_review" if records else "unreadable_or_unsupported"
+        ),
+        calculation_ready=False,
+        requires_review=True,
+        layout="Shared geometric source evidence",
+        notice="Source-backed candidates; resolve missing fields and deductions before approval.",
+        issues=deepcopy(facts.get("issues", [])),
+    )

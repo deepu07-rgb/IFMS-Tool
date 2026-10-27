@@ -76,6 +76,17 @@ def statement_pdf(filename, payload, status):
     )
     story.append(table)
     for r in payload.get("statement_rows", []):
+        details = []
+        for side in ("due", "drawn"):
+            for head, amount in r.get(side, {}).items():
+                details.append(
+                    escape(side.title() + " " + head)
+                    + ": "
+                    + escape(str(amount) if amount is not None else "not read")
+                )
+        story.append(
+            Paragraph(escape(r["month"]) + ": " + "; ".join(details), styles["Normal"])
+        )
         if r.get("issues"):
             story.append(
                 Paragraph(
@@ -183,6 +194,14 @@ def register_document_exports(suite):
             values.extend([period.get("start", ""), period.get("end", "")])
             s.append(values)
         if payload.get("statement_rows"):
+            heads = list(
+                dict.fromkeys(
+                    head
+                    for r in payload["statement_rows"]
+                    for side in ("due", "drawn")
+                    for head in r.get(side, {})
+                )
+            )
             s = w.create_sheet("Statement review")
             s.append([status + " · " + row["filename"]])
             s.append(
@@ -191,12 +210,11 @@ def register_document_exports(suite):
                     "Worksheet",
                     "Source row",
                     "Page",
-                    "Due Basic",
-                    "Due DA",
-                    "Due HRA",
-                    "Drawn Basic",
-                    "Drawn DA",
-                    "Drawn HRA",
+                    *[
+                        side.title() + " " + head
+                        for side in ("due", "drawn")
+                        for head in heads
+                    ],
                     "Printed Due",
                     "Printed Drawn",
                     "Printed difference",
@@ -212,9 +230,13 @@ def register_document_exports(suite):
                         r.get("source_row", ""),
                         r.get("source_page", ""),
                         *[
-                            float(Decimal(r[k][h]))
+                            (
+                                float(Decimal(r.get(k, {}).get(h)))
+                                if r.get(k, {}).get(h) is not None
+                                else None
+                            )
                             for k in ("due", "drawn")
-                            for h in ("Basic", "DA", "HRA")
+                            for h in heads
                         ],
                         r["printed_due"],
                         r["printed_drawn"],

@@ -106,3 +106,18 @@ Tested two additional private full-PDF cases: suspension-related pay fixation/in
 Fixed recurring source-reading problems in facts version v5: fiscal-period validation and image re-reading; suspicious numeric glyphs trigger crop recognition without digit substitution; new-month continuation identity requires reliable matching context and consecutive printed pages; new-profile header tokens prevent cross-employee carry; visible omitted month/bill rows create document blockers. Original readings and crop evidence remain available.
 
 One new source improved from seven records/six complete to eight/eight complete. The other improved from eight/three complete to eight/four complete. Both unassisted claim attempts remain blocked on unresolved source/order/reference evidence; handwritten statement parsing is still incomplete. No automatic acceptance pass is claimed. Packaging remains paused; no libraries or models were added.
+
+
+## Approved workload-reduction repairs — implementation checkpoint
+
+User approved the workload-reduction proposal and reserved bundling until more samples and manual acceptance. Work is in progress; this checkpoint is not a readiness declaration.
+
+Implemented shared original-source extraction/cache for scanned GA55 and HRA; source SHA/version checks; review-compatible payment records with missing deduction heads explicitly flagged; field-specific identity/month/bill/amount reviews preserving raw OCR and audit; stale-review archival on changed extraction; compare-and-swap import updates to prevent concurrent review loss/reopening approved imports. Missing printed totals block payment-history approval for the shared scanner.
+
+Statement parser now maps explicit component headings/variants including HDA/CCA, preserves unresolved amounts, checks component differences and optional independent reference rows. PDF/Excel preserve extra heads and missing-cell status; statement claims reject omitted/unresolved source values. Review table displays all parsed heads. This is layout interpretation, not a new handwriting recognizer.
+
+Legacy Inner parser boundary and early-summary fixes resolve all original total fixture failures without changing expected values; see LEGACY_TOTALS_DIAGNOSIS.md. A conservative printed increment-table extractor is implemented and unit-tested but is not yet connected to automatic multi-month increment preparation; the supplied name-only handwritten/narrative order remains unsupported.
+
+Verification: 82 focused extraction/review/HRA/statement/order/export tests passed in this session. Earlier whole-suite pass before final integrations: 298 passed,14 skipped,3 failures from obsolete route/unchanged-parser assumptions; those tests were updated to exercise shared extraction and runtime correctness. Final complete run pending. Private fresh sample replay so far still produces zero automatic claims; no workload or automatic-accuracy target has been achieved.
+
+Outstanding approved work: broader Hindi/name-only order association with explicit identity review, automatic multi-month combined bill orchestration, deduction-head extraction, complete exception-to-calculation lifecycle, independent source comparison integration, full private corpus replay, browser/operator workflow measurement, and holdout tests. No bundling or release performed.

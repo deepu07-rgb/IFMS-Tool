@@ -370,13 +370,14 @@ def register_automatic_hra(suite):
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() != source["sha256"]:
             raise ValueError("Original source changed; reimport it")
-        facts = original.get("machine_facts")
-        if (
-            facts is None
-            or original.get("machine_facts_version") != FACTS_VERSION
-            or (request.get_json() or {}).get("refresh") is True
-        ):
-            facts = extract_document_facts(data)
+        from .source_evidence import source_facts
+
+        facts = source_facts(
+            data,
+            source["sha256"],
+            original,
+            refresh=(request.get_json() or {}).get("refresh") is True,
+        )
         with database() as db:
             db.execute("BEGIN IMMEDIATE")
             latest = json.loads(
@@ -384,13 +385,31 @@ def register_automatic_hra(suite):
                     "SELECT payload FROM suite_imports WHERE id=?", (id,)
                 ).fetchone()["payload"]
             )
+            current_source = db.execute(
+                "SELECT status,payload FROM suite_imports WHERE id=?", (id,)
+            ).fetchone()
+            if (
+                current_source["payload"] != source["payload"]
+                or current_source["status"] != source["status"]
+            ):
+                raise ValueError("Import changed during extraction; reload it")
+            for key in ("bill_field_reviews", "superseded_bill_field_reviews"):
+                if key in original:
+                    latest[key] = original[key]
             latest.update(machine_facts=facts, machine_facts_version=FACTS_VERSION)
             db.execute(
                 "UPDATE suite_imports SET payload=? WHERE id=?",
                 (json.dumps(latest), id),
             )
+            from .evidence_routes import reviewed_facts
+
+            evidence = (
+                reviewed_facts(latest, source["sha256"])
+                if latest.get("bill_field_reviews")
+                else facts
+            )
             result = workspace_reconciliation(
-                db, facts, latest.get("machine_fact_reviews", [])
+                db, evidence, latest.get("machine_fact_reviews", [])
             )
             claims = []
             for draft in result["drafts"]:
@@ -621,8 +640,15 @@ def validate_automatic_draft(db, payload, calculation, review):
         or payload.get("machine_facts_version") != FACTS_VERSION
     ):
         raise ValueError("Extraction version changed; rebuild the machine draft")
+    from .evidence_routes import reviewed_facts
+
+    evidence = (
+        reviewed_facts(original, source["sha256"])
+        if original.get("bill_field_reviews")
+        else original.get("machine_facts", {})
+    )
     fresh = workspace_reconciliation(
-        db, original.get("machine_facts", {}), original.get("machine_fact_reviews", [])
+        db, evidence, original.get("machine_fact_reviews", [])
     )
     target = [
         d

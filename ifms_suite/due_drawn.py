@@ -1,7 +1,6 @@
-"""Recognize the supplied Basic/DA/HRA due-drawn layout conservatively."""
+"""Read explicitly labelled due/drawn tables without repairing source amounts."""
 
 from datetime import datetime, date
-from decimal import Decimal
 import re
 from .calculation import money, rounded
 
@@ -27,55 +26,219 @@ def month_value(v):
     return None
 
 
-def parse_statement_table(rows):
-    layout = None
-    for index, row in enumerate(rows[:30]):
-        labels = [" ".join(str(c or "").lower().split()) for c in row]
-        due = next((i for i, l in enumerate(labels) if l == "pay due"), None)
-        drawn = next((i for i, l in enumerate(labels) if l == "pay drawn"), None)
-        if due is not None and drawn is not None and drawn - due == 4 and due >= 1:
-            layout = (index, due, drawn)
+def _label(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+_GROUPS = {
+    "paydue": "due",
+    "duepay": "due",
+    "due": "due",
+    "amountdue": "due",
+    "paydrawn": "drawn",
+    "drawnpay": "drawn",
+    "drawn": "drawn",
+    "amountdrawn": "drawn",
+    "paydifference": "difference",
+    "difference": "difference",
+    "arrear": "difference",
+    "arrears": "difference",
+}
+_COMPONENTS = {
+    "basic": "Basic",
+    "basicpay": "Basic",
+    "da": "DA",
+    "dearnessallowance": "DA",
+    "hra": "HRA",
+    "houserentallowance": "HRA",
+    "hda": "HDA",
+    "cca": "CCA",
+    "citycompensatoryallowance": "CCA",
+    "total": "Total",
+    "grosstotal": "Total",
+    "totalpay": "Total",
+}
+
+
+def _layout(rows, index, aliases):
+    headings = [
+        (i, _GROUPS[_label(v)])
+        for i, v in enumerate(rows[index])
+        if _label(v) in _GROUPS
+    ]
+    if not {"due", "drawn"}.issubset(group for _, group in headings):
+        return None
+    if len({group for _, group in headings}) != len(headings):
+        return None
+    # Headers may span blank/annotation rows, but never search across financial rows.
+    for offset in range(1, 4):
+        if index + offset >= len(rows):
             break
-    if layout is None:
-        return []
-    header, due, drawn = layout
-    result = []
-    for index, row in enumerate(rows[header + 1 :], header + 2):
-        if len(row) < drawn + 4:
+        header = rows[index + offset]
+        if any(month_value(v) for v in header):
+            break
+        groups = {}
+        for pos, (start, group) in enumerate(headings):
+            end = (
+                headings[pos + 1][0]
+                if pos + 1 < len(headings)
+                else max(len(header), len(rows[index]))
+            )
+            mapping = {}
+            for column in range(start, end):
+                name = (
+                    aliases.get(_label(header[column]))
+                    if column < len(header)
+                    else None
+                )
+                if name is None or name in mapping:
+                    break
+                mapping[name] = column
+            else:
+                if "Total" in mapping and len(mapping) > 1:
+                    groups[group] = mapping
+        if len(groups) != len(headings):
             continue
-        month = month_value(row[due - 1])
+        if set(groups["due"]) != set(groups["drawn"]):
+            continue
+        month_columns = [
+            i
+            for i, v in enumerate(rows[index][: headings[0][0]])
+            if _label(v) in {"month", "paymonth", "monthyear", "period"}
+        ]
+        if len(month_columns) != 1:
+            continue
+        return index + offset, month_columns[0], groups
+    return None
+
+
+def parse_statement_table(rows, *, component_aliases=None, reference_rows=None):
+    """Read explicitly labelled groups; absent amounts remain unresolved.
+
+    Optional reference_rows are independently prepared month/due/drawn records.
+    They are compared as supplied, never used to fill or repair statement cells.
+    Unknown or ambiguous header layouts are deliberately left unparsed.
+    """
+    aliases = dict(_COMPONENTS)
+    for label, component in (component_aliases or {}).items():
+        if (
+            not isinstance(component, str)
+            or not component.strip()
+            or component == "Total"
+        ):
+            raise ValueError("A component mapping requires a non-total component name")
+        aliases[_label(label)] = component
+    references = {}
+    for reference in reference_rows or []:
+        references.setdefault(month_value(reference.get("month")), []).append(reference)
+    result = []
+    layout = None
+    for index, row in enumerate(rows):
+        if any(_label(v) in _GROUPS for v in row):
+            layout = _layout(rows, index, aliases)
+            continue
+        if layout is None:
+            continue
+        header_end, month_column, groups = layout
+        if index <= header_end or month_column >= len(row):
+            continue
+        month = month_value(row[month_column])
         if not month:
             continue
-        try:
-            d = [money(v) for v in row[due : due + 4]]
-            a = [money(v) for v in row[drawn : drawn + 4]]
-        except ValueError:
-            continue
-        printed = None
-        if len(row) > drawn + 7:
-            try:
-                printed = rounded(money(row[drawn + 7]))
-            except ValueError:
-                pass
-        difference = rounded(d[3] - a[3])
         issues = []
-        if rounded(sum(d[:3])) != rounded(d[3]):
-            issues.append("Pay Due components do not match printed total")
-        if rounded(sum(a[:3])) != rounded(a[3]):
-            issues.append("Pay Drawn components do not match printed total")
-        if printed is not None and printed != difference:
+        values = {}
+        for group, mapping in groups.items():
+            values[group] = {}
+            for component, column in mapping.items():
+                try:
+                    amount = money(row[column]) if column < len(row) else money(None)
+                except ValueError:
+                    amount = None
+                    issues.append(
+                        f"{group.title()} {component} is missing or unreadable"
+                    )
+                values[group][component] = amount
+        due, drawn = values["due"], values["drawn"]
+        for group, amounts in [("Pay Due", due), ("Pay Drawn", drawn)]:
+            if all(v is not None for v in amounts.values()) and rounded(
+                sum(v for k, v in amounts.items() if k != "Total")
+            ) != rounded(amounts["Total"]):
+                issues.append(f"{group} components do not match printed total")
+        difference = (
+            rounded(due["Total"] - drawn["Total"])
+            if due["Total"] is not None and drawn["Total"] is not None
+            else None
+        )
+        printed = values.get("difference", {}).get("Total")
+        if (
+            printed is not None
+            and difference is not None
+            and rounded(printed) != difference
+        ):
             issues.append("Printed difference does not match Due minus Drawn")
+        for component, amount in values.get("difference", {}).items():
+            if component == "Total" or amount is None:
+                continue
+            if component not in due or component not in drawn:
+                issues.append(
+                    f"Printed {component} difference has no matching Due/Drawn component"
+                )
+            elif (
+                due[component] is not None
+                and drawn[component] is not None
+                and rounded(amount) != rounded(due[component] - drawn[component])
+            ):
+                issues.append(
+                    f"Printed {component} difference does not match Due minus Drawn"
+                )
+        matches = references.get(month, [])
+        if reference_rows is not None and len(matches) != 1:
+            issues.append(
+                "Independent source comparison incomplete: missing or ambiguous month"
+            )
+        elif matches:
+            for side in ("due", "drawn"):
+                source = matches[0].get(side, {})
+                for component in dict.fromkeys([*values[side], *source]):
+                    if component not in source:
+                        issues.append(
+                            f"{side.title()} {component} source comparison incomplete"
+                        )
+                        continue
+                    expected = source[component]
+                    try:
+                        expected = money(expected)
+                    except ValueError:
+                        issues.append(
+                            f"{side.title()} {component} source value is unresolved"
+                        )
+                        continue
+                    actual = values[side].get(component)
+                    if actual is None:
+                        issues.append(
+                            f"{side.title()} {component} source comparison incomplete"
+                        )
+                    elif rounded(actual) != rounded(expected):
+                        issues.append(
+                            f"{side.title()} {component} does not match independent source"
+                        )
+
+        def formatted(value):
+            return f"{value:.2f}" if value is not None else None
+
         result.append(
             dict(
                 month=month,
-                due=dict(zip(["Basic", "DA", "HRA"], [f"{v:.2f}" for v in d[:3]])),
-                drawn=dict(zip(["Basic", "DA", "HRA"], [f"{v:.2f}" for v in a[:3]])),
-                printed_due=f"{d[3]:.2f}",
-                printed_drawn=f"{a[3]:.2f}",
-                printed_difference=f"{printed:.2f}" if printed is not None else None,
-                calculated_difference=f"{difference:.2f}",
+                due={k: formatted(v) for k, v in due.items() if k != "Total"},
+                drawn={k: formatted(v) for k, v in drawn.items() if k != "Total"},
+                printed_due=formatted(due["Total"]),
+                printed_drawn=formatted(drawn["Total"]),
+                printed_difference=(
+                    formatted(rounded(printed)) if printed is not None else None
+                ),
+                calculated_difference=formatted(difference),
                 issues=issues,
-                source_row=index,
+                source_row=index + 1,
                 requires_review=True,
             )
         )

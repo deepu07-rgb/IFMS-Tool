@@ -519,31 +519,45 @@ def ocr_import(id):
             / "suite"
             / (row["sha256"] + ".pdf")
         )
-        pages, derivative = ocr_document(
-            path.read_bytes(), (request.get_json() or {}).get("language", "eng")
-        )
-        path.with_suffix(".ocr.pdf").write_bytes(derivative)
         payload = json.loads(row["payload"])
-        payload["pages"] = pages
-        payload["ocr_used"] = True
+        data = path.read_bytes()
         if payload["kind"] == "ga55":
-            payload["ga55"] = parse_ga55(pages)
-            from .ga55_table_ocr import improve_scanned_ga55
+            from .source_evidence import source_facts, payment_candidates
 
-            payload["ga55"] = improve_scanned_ga55(payload["ga55"], derivative)
+            facts = source_facts(
+                data,
+                row["sha256"],
+                payload,
+                refresh=(request.get_json() or {}).get("refresh") is True,
+            )
+            if payload.get("bill_field_reviews"):
+                from .evidence_routes import reviewed_facts
 
-        if payload["kind"] == "due_drawn":
-            from .due_drawn import parse_pdf_tables
+                facts = reviewed_facts(payload, row["sha256"])
+            payload["ga55"] = payment_candidates(facts)
+        else:
+            if hashlib.sha256(data).hexdigest() != row["sha256"]:
+                raise ValueError("Original source changed; reimport it")
+            pages, derivative = ocr_document(
+                data, (request.get_json() or {}).get("language", "eng")
+            )
+            path.with_suffix(".ocr.pdf").write_bytes(derivative)
+            payload["pages"] = pages
+            if payload["kind"] == "due_drawn":
+                from .due_drawn import parse_pdf_tables
 
-            payload["statement_rows"] = parse_pdf_tables(derivative)
+                payload["statement_rows"] = parse_pdf_tables(derivative)
+        payload["ocr_used"] = True
         payload["notice"] = payload.get("ga55", {}).get(
             "notice",
             "OCR output requires source review, including digits, signs and dates.",
         )
-        db.execute(
-            "UPDATE suite_imports SET payload=?,status='needs_review' WHERE id=?",
-            (json.dumps(payload), id),
+        updated = db.execute(
+            "UPDATE suite_imports SET payload=?,status='needs_review' WHERE id=? AND status=? AND payload=?",
+            (json.dumps(payload), id, row["status"], row["payload"]),
         )
+        if updated.rowcount != 1:
+            raise ValueError("Import changed during OCR; reload it")
     return jsonify(payload)
 
 
@@ -589,9 +603,9 @@ def review_import(id):
             )
         from .payroll import reviewed_payment
 
-        column_ocr = (
-            json.loads(row["payload"]).get("ga55", {}).get("layout")
-            == "GA55 A column OCR"
+        column_ocr = json.loads(row["payload"]).get("ga55", {}).get("layout") in (
+            "GA55 A column OCR",
+            "Shared geometric source evidence",
         )
         if column_ocr and any(
             any(
@@ -675,3 +689,8 @@ def register_suite(app):
             with database() as db:
                 load_reference(db)
     app.register_blueprint(suite)
+
+
+from .evidence_routes import register_evidence_routes
+
+register_evidence_routes(suite)

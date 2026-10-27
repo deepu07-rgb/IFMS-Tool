@@ -486,8 +486,14 @@ $("automaticHraResults").onsubmit = async e => {
   } catch(x) {notify(x.message);} finally {button.disabled=false;}
 };
 $("importsList").onclick = async (e) => {
-  const b = e.target.closest("[data-review-import],[data-ocr],[data-automatic-hra]");
+  const b = e.target.closest("[data-review-import],[data-ocr],[data-automatic-hra],[data-evidence]");
   if (!b) return;
+  if (b.dataset.evidence) {
+    b.disabled = true;
+    try { renderEvidence(await api(`imports/${b.dataset.evidence}/evidence`), b.dataset.evidence); }
+    catch (x) { notify(x.message); } finally { b.disabled=false; }
+    return;
+  }
   if (b.dataset.automaticHra) {
     b.disabled = true;
     notify("Reading printed salary and sanction records locally. This can take a few minutes.");
@@ -628,7 +634,7 @@ async function refresh() {
   $("importsList").innerHTML = imports
     .map(
       (i) =>
-        `<div class="card"><h2>${escapeHTML(i.filename)}</h2><p>${escapeHTML(i.status)} · ${escapeHTML(i.payload.notice || "Review source before using amounts")}</p><a class="action" target="_blank" rel="noopener" href="/suite/api/imports/${i.id}/source">View source</a><a class="action" href="/suite/api/imports/${i.id}/pdf">PDF export</a><a class="action" href="/suite/api/imports/${i.id}/excel">Excel export</a>${i.status !== "reviewed" ? `<button class="action" data-review-import="${i.id}">${i.payload.kind === "due_drawn" ? "Check / recalculate statement" : "Review / enter payments"}</button>${i.payload.scan_pages?.length ? `<button class="action" data-ocr="${i.id}">Run local OCR</button>` : ""}` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-automatic-hra="${i.id}">Build HRA draft from PDF</button>` : ""}${i.payload.extracted ? outerSummary(i.payload.extracted) : ""}<p>${i.payload.ga55?.payments.length ?? 0} candidate payment entries</p><details><summary>Source text (${i.payload.pages.length} pages)</summary>${i.payload.pages.map((t, n) => `<h3>Page ${n + 1}</h3><pre>${escapeHTML(t || "No selectable text")}</pre>`).join("")}</details></div>`,
+        `<div class="card"><h2>${escapeHTML(i.filename)}</h2><p>${escapeHTML(i.status)} · ${escapeHTML(i.payload.notice || "Review source before using amounts")}</p><a class="action" target="_blank" rel="noopener" href="/suite/api/imports/${i.id}/source">View source</a><a class="action" href="/suite/api/imports/${i.id}/pdf">PDF export</a><a class="action" href="/suite/api/imports/${i.id}/excel">Excel export</a>${i.status !== "reviewed" ? `<button class="action" data-review-import="${i.id}">${i.payload.kind === "due_drawn" ? "Check / recalculate statement" : "Review / enter payments"}</button>${i.payload.scan_pages?.length ? `<button class="action" data-ocr="${i.id}">Run local OCR</button>` : ""}` : ""}${i.payload.file_kind === "pdf" && i.status !== "reviewed" ? `<button class="action" data-evidence="${i.id}">Review unresolved source fields</button>` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-automatic-hra="${i.id}">Build HRA draft from PDF</button>` : ""}${i.payload.extracted ? outerSummary(i.payload.extracted) : ""}<p>${i.payload.ga55?.payments.length ?? 0} candidate payment entries</p><details><summary>Source text (${i.payload.pages.length} pages)</summary>${i.payload.pages.map((t, n) => `<h3>Page ${n + 1}</h3><pre>${escapeHTML(t || "No selectable text")}</pre>`).join("")}</details></div>`,
     )
     .join("");
   renderPersistent(
@@ -677,11 +683,12 @@ function reviewStatement(id, sheet) {
   }
   sheet = sheet || sheets[0];
   const rows = candidates.filter((r) => (r.source_sheet || "PDF") === sheet);
-  let html = `<div class="card"><h2>Check & recalculate due–drawn</h2><label>Source worksheet<select id="statementSheet">${sheets.map((s) => `<option ${s === sheet ? "selected" : ""}>${escapeHTML(s)}</option>`).join("")}</select></label><form id="statementForm"><label>Employee code<input name="employee_code" list="employeeOptions" required></label><label>Component<select name="allowance"><option>DA</option><option>HRA</option><option>BASIC</option></select></label><label>Entitlement<select name="entitlement_type"><option value="salary">Regular salary arrear</option><option value="leave_encashment">Leave encashment / surrender</option></select></label><label>Method<select name="method"><option value="rates">Recalculate from reviewed rate library</option><option value="uploaded">Use corrected uploaded due amounts</option></select></label><label>HRA category<select name="category"><option value="">General / DA</option><option>Y</option><option>Z</option></select></label><p>Enter the actual covered dates. If the uploaded amounts already represent those partial dates, tick the option below to avoid prorating twice.</p><label><span>Uploaded amounts already cover the selected dates</span><input name="period_amounts" type="checkbox"></label><div class="scroll"><table><thead><tr><th>Use</th><th>Month / source row</th><th>From</th><th>Through</th><th>Due basic</th><th>Due DA</th><th>Due HRA</th><th>Drawn basic</th><th>Drawn DA</th><th>Drawn HRA</th><th>Source checks</th></tr></thead><tbody>${rows
+  const statementHeads = [...new Set(rows.flatMap(r => [...Object.keys(r.due || {}), ...Object.keys(r.drawn || {})]))];
+  let html = `<div class="card"><h2>Check & recalculate due–drawn</h2><label>Source worksheet<select id="statementSheet">${sheets.map((s) => `<option ${s === sheet ? "selected" : ""}>${escapeHTML(s)}</option>`).join("")}</select></label><form id="statementForm"><label>Employee code<input name="employee_code" list="employeeOptions" required></label><label>Component<select name="allowance"><option>DA</option><option>HRA</option><option>BASIC</option></select></label><label>Entitlement<select name="entitlement_type"><option value="salary">Regular salary arrear</option><option value="leave_encashment">Leave encashment / surrender</option></select></label><label>Method<select name="method"><option value="rates">Recalculate from reviewed rate library</option><option value="uploaded">Use corrected uploaded due amounts</option></select></label><label>HRA category<select name="category"><option value="">General / DA</option><option>Y</option><option>Z</option></select></label><p>Enter the actual covered dates. If the uploaded amounts already represent those partial dates, tick the option below to avoid prorating twice.</p><label><span>Uploaded amounts already cover the selected dates</span><input name="period_amounts" type="checkbox"></label><div class="scroll"><table><thead><tr><th>Use</th><th>Month / source row</th><th>From</th><th>Through</th>${["due", "drawn"].flatMap(kind => statementHeads.map(head => `<th>${escapeHTML(kind)} ${escapeHTML(head)}</th>`)).join("")}<th>Source checks</th></tr></thead><tbody>${rows
     .map((r, i) => {
       const [y, m] = r.month.split("-").map(Number);
       const end = r.month + "-" + new Date(y, m, 0).getDate();
-      return `<tr class="statement-row" data-index="${i}"><td><input type="checkbox" data-use checked></td><td>${escapeHTML(r.month)} / ${escapeHTML(r.source_row)}</td><td><input type="date" data-key="start" value="${r.month}-01"></td><td><input type="date" data-key="end" value="${end}"></td>${["due", "drawn"].flatMap((kind) => ["Basic", "DA", "HRA"].map((k) => `<td><input type="number" step="0.01" data-kind="${kind}" data-head="${k}" value="${escapeHTML(r[kind][k])}" style="width:100px"></td>`)).join("")}<td>${escapeHTML((r.issues || []).join("; ") || "Source arithmetic matches")}<br>Printed difference ${escapeHTML(r.printed_difference ?? "not read")}; calculated ${escapeHTML(r.calculated_difference)}</td></tr>`;
+      return `<tr class="statement-row" data-index="${i}"><td><input type="checkbox" data-use checked></td><td>${escapeHTML(r.month)} / ${escapeHTML(r.source_row)}</td><td><input type="date" data-key="start" value="${r.month}-01"></td><td><input type="date" data-key="end" value="${end}"></td>${["due", "drawn"].flatMap((kind) => statementHeads.map((k) => `<td><input type="number" step="0.01" data-kind="${kind}" data-head="${k}" value="${escapeHTML(r[kind]?.[k] ?? "")}" style="width:100px"></td>`)).join("")}<td>${escapeHTML((r.issues || []).join("; ") || "Source arithmetic matches")}<br>Printed difference ${escapeHTML(r.printed_difference ?? "not read")}; calculated ${escapeHTML(r.calculated_difference)}</td></tr>`;
     })
     .join(
       "",
@@ -1057,3 +1064,20 @@ $("incrementForm").onsubmit = async (e) => {
     notify(error.message);
   }
 };
+
+function renderEvidence(result, id) {
+  const target = $("paymentReview");
+  target.innerHTML = `<h2>Review unresolved bill fields</h2><p>Confirm only fields you can verify in the original. Other source issues may still block preparation.</p>${result.requests.map((r,n)=>`<details><summary>${escapeHTML(r.pay_month || "Month unresolved")} · ${escapeHTML(r.field)} · ${escapeHTML(r.value ?? "Not read")}</summary><a target="_blank" rel="noopener" href="/suite/api/imports/${Number(id)}/source#page=${Number(r.source_pages[0])}">Open original page ${Number(r.source_pages[0])}</a><form data-evidence-index="${n}"><label>Verified ${escapeHTML(r.field)}<input name="value" required value="${escapeHTML(r.value ?? "")}"></label><label>Source reference<input name="reference" required value="Original page ${Number(r.source_pages[0])}"></label><label><input type="checkbox" name="reviewed" required>I checked this field against the original</label><button class="action">Save this field</button></form></details>`).join("") || "<p>No supported unresolved bill fields. Check remaining order, page or payment issues.</p>"}`;
+  target.onsubmit = async e => {
+    const form = e.target.closest("[data-evidence-index]");
+    if (!form) return;
+    e.preventDefault();
+    const r=result.requests[Number(form.dataset.evidenceIndex)];
+    const button=form.querySelector("button"); button.disabled=true;
+    try {
+      const updated=await post(`imports/${id}/evidence`, {request_id:r.request_id, field:r.field, source_sha256:r.source_sha256, facts_version:r.facts_version, value:form.elements.value.value, reference:form.elements.reference.value, reviewed:form.elements.reviewed.checked});
+      await refresh(); renderEvidence(updated,id); notify("Field confirmation saved; remaining evidence still needs checking");
+    } catch(x) {notify(x.message); button.disabled=false;}
+  };
+  target.scrollIntoView({behavior:"smooth"});
+}

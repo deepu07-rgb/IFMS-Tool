@@ -106,3 +106,63 @@ def test_excel_statement_exports_readable_pdf_and_structured_rows(client):
     w = load_workbook(io.BytesIO(export.data))
     assert "Statement review" in w.sheetnames
     assert w["Statement review"]["A3"].value == "2025-01"
+
+
+def test_statement_export_preserves_extra_heads_and_unresolved_cells(client):
+    import json
+    from ifms_suite.storage import database
+    from openpyxl import load_workbook
+
+    payload = {
+        "file_kind": "xlsx",
+        "statement_rows": [
+            {
+                "month": "2025-02",
+                "due": {
+                    "Basic": "50000.00",
+                    "DA": "27500.00",
+                    "HDA": None,
+                    "CCA": "500.00",
+                    "HRA": "10000.00",
+                },
+                "drawn": {
+                    "Basic": "50000.00",
+                    "DA": "26500.00",
+                    "HDA": "900.00",
+                    "CCA": "400.00",
+                    "HRA": "9000.00",
+                },
+                "printed_due": "89000.00",
+                "printed_drawn": "86800.00",
+                "printed_difference": "2200.00",
+                "calculated_difference": "2200.00",
+                "source_row": 3,
+                "source_sheet": "Arrear",
+                "issues": ["Due HDA is missing or unreadable"],
+            }
+        ],
+    }
+    with client.application.app_context(), database() as db:
+        source_id = db.execute(
+            "INSERT INTO suite_imports(sha256,filename,payload) VALUES(?,?,?)",
+            ("synthetic-expanded-statement", "synthetic.xlsx", json.dumps(payload)),
+        ).lastrowid
+    response = client.get(f"/suite/api/imports/{source_id}/excel")
+    assert response.status_code == 200
+    workbook = load_workbook(io.BytesIO(response.data))
+    sheet = workbook["Statement review"]
+    headers = [cell.value for cell in sheet[2]]
+    assert sheet.cell(3, headers.index("Due HDA") + 1).value is None
+    assert sheet.cell(3, headers.index("Drawn HDA") + 1).value == 900
+    assert sheet.cell(3, headers.index("Due CCA") + 1).value == 500
+    assert "HDA" in sheet.cell(3, headers.index("Issues") + 1).value
+    response = client.get(f"/suite/api/imports/{source_id}/pdf")
+    assert response.status_code == 200
+    import pymupdf
+
+    with pymupdf.open(stream=response.data, filetype="pdf") as report:
+        text = "".join(page.get_text() for page in report)
+    assert "Due HDA" in text
+    assert "Drawn CCA" in text
+    assert "900.00" in text
+    assert "not read" in text.lower()

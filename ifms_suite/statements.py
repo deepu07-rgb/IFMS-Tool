@@ -64,6 +64,47 @@ def register_statements(suite):
                     "source_sheet", r.get("source_sheet", "PDF")
                 ):
                     continue
+                # Review must preserve every identified source head, including heads
+                # outside this single-component claim. A matching net is insufficient.
+                matching_sources = [
+                    source_row
+                    for source_row in original.get("statement_rows", [])
+                    if source_row.get("month") == r.get("month")
+                    and source_row.get("source_sheet", "PDF")
+                    == r.get("source_sheet", "PDF")
+                ]
+                for total in ("printed_due", "printed_drawn"):
+                    if total in r or any(
+                        total in source_row for source_row in matching_sources
+                    ):
+                        try:
+                            money(r.get(total))
+                        except ValueError:
+                            raise ValueError(
+                                "Resolve printed statement total "
+                                + total
+                                + " before creating a claim"
+                            ) from None
+                for side in ("due", "drawn"):
+                    amounts = r.get(side, {})
+                    source_heads = {
+                        name
+                        for source_row in matching_sources
+                        for name in source_row.get(side, {})
+                    }
+                    missing = source_heads - amounts.keys()
+                    if missing:
+                        raise ValueError(
+                            "Statement review omitted source components: "
+                            + ", ".join(sorted(missing))
+                        )
+                    for name, amount in amounts.items():
+                        try:
+                            money(amount)
+                        except ValueError:
+                            raise ValueError(
+                                f"Resolve {side} {name} before creating a statement claim"
+                            ) from None
                 first = date.fromisoformat(r["month"] + "-01")
                 last = date(
                     first.year, first.month, monthrange(first.year, first.month)[1]

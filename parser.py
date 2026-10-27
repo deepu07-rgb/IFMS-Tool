@@ -182,8 +182,9 @@ def _find_data_boundary(words):
         y = w['top']
         x = w['x0']
 
-        # "Gross Amount:" summary line — last page only
-        if t == 'Gross' and x < 50 and y > 200:
+        # A short final page can place the summary above y=200. Its left
+        # margin distinguishes it from the employee-column Gross heading.
+        if t == 'Gross' and x < 50:
             nearby = [ww for ww in words if abs(ww['top'] - y) < 4 and 40 < ww['x0'] < 120]
             if any('Amount' in ww.get('text', '') for ww in nearby):
                 candidates.append(y)
@@ -453,12 +454,14 @@ def _parse_emp_block(sr_no, bwords):
                 else:
                     d['names'].append(t)
 
-            elif 660 <= x < 715:
+            elif 660 <= x < 705.53:
                 v = _pn(t)
                 if v is not None:
                     emp['sum_deduction'] = v
 
-            elif x >= 715:
+            elif x >= 705.53:
+                # The printed divider is x=705.53. Right-aligned six-digit
+                # net amounts start around x=712.6, before the old 715 cutoff.
                 v = _pn(t)
                 if v is not None and abs(v) > 10:
                     emp['net_total'] = v

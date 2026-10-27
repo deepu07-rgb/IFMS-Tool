@@ -172,33 +172,13 @@ def test_ocr_route_preserves_base_when_column_coverage_is_partial(
     for _ in range(pages):
         d.new_page()
     data = d.tobytes()
-    good = dict(
-        source_pages=[1],
-        bill_type="Salary",
-        printed_gross="1600",
-        allowances={"Basic": "1000", "DA": "600"},
-    )
-    bad = dict(source_pages=[2], bill_type="Unreadable", allowances={})
-    monkeypatch.setattr(
-        documents, "ocr_document", lambda *args: (["scan"] * pages, data)
-    )
-    monkeypatch.setattr(
-        documents, "parse_ga55", lambda *args: {"payments": [good, bad]}
-    )
-    monkeypatch.setattr(
-        g,
-        "parse_scanned_ga55_tables",
-        lambda data: dict(
-            payments=[
-                dict(
-                    source_pages=[2],
-                    bill_type="Regular Salary",
-                    allowances={"Basic": "1000"},
-                )
-            ],
-            layout="GA55 A column OCR",
-        ),
-    )
+    from ifms_suite import document_facts
+    good = dict(source_pages=[1], employee_code="RJTEST", pay_month="2026-07",
+                bill_no="123456789", bill_type="Regular Salary", complete=True,
+                printed_gross="1600", allowances={"Basic":"1000", "DA":"600"})
+    bad = dict(source_pages=[2], bill_type="Unreadable", allowances={}, complete=False)
+    monkeypatch.setattr(document_facts, "extract_document_facts",
+                        lambda raw: {"bills": [good, bad], "issues": []})
     imported = client.post(
         "/suite/api/imports",
         data={"kind": "ga55", "file": (io.BytesIO(data), "synthetic.pdf")},
@@ -206,10 +186,12 @@ def test_ocr_route_preserves_base_when_column_coverage_is_partial(
     assert imported.status_code == 201
     response = client.post(f"/suite/api/imports/{imported.json['id']}/ocr", json={})
     assert response.status_code == 200
-    assert good in response.json["ga55"]["payments"]
-    assert len(response.json["ga55"]["payments"]) == 2
-    if pages == 41:
-        assert response.json["ga55"]["payments"] == [good, bad]
+    records = response.json["ga55"]["payments"]
+    assert len(records) == 2
+    assert records[0]["allowances"] == good["allowances"]
+    assert records[0]["source_pages"] == [1]
+    assert records[1]["complete"] is False
+    assert response.json["ga55"]["calculation_ready"] is False
 
 
 def test_ga55_header_with_only_numeric_form_suffix_needs_other_evidence():
