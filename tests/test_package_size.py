@@ -15,7 +15,11 @@ def test_payload_size_counts_symlink_metadata_without_duplicating_library(tmp_pa
         (tmp_path / "alias.bin").symlink_to("library.bin")
     except OSError:
         pytest.skip("Symlinks unavailable")
-    assert build.payload_size(tmp_path) == 1024 + len("library.bin")
+    # Windows reports zero bytes for a symlink's own metadata; POSIX reports
+    # the stored target path length. Neither platform duplicates target bytes.
+    alias_metadata = (tmp_path / "alias.bin").lstat().st_size
+    assert build.payload_size(tmp_path) == 1024 + alias_metadata
+    assert build.payload_size(tmp_path) < 2048
 
 
 def test_payload_size_rejects_external_symlink(tmp_path):
