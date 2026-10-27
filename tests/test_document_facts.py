@@ -619,3 +619,125 @@ def test_independent_exact_header_recovers_neural_label_typo_without_guessing(
     secondary["confidence"] = 0.2
     words = module._recognize_page(p, recognize, ("unused", {}, None))
     assert not any(q["text"] == "Gross" for q in words)
+
+
+def test_invalid_fiscal_period_cannot_link_employee_pages():
+    from ifms_suite.document_facts import _page_key, _candidate_value, _critical_kind
+
+    invalid = w("2030-32", 0.85, 0.1)
+    assert _page_key([invalid, w("GroupName:Demo", 0.5, 0.96)])[0] == ""
+    assert _critical_kind(invalid) == "fiscal_year"
+    assert _candidate_value(invalid, "fiscal_year") is None
+    assert _candidate_value(w("2031-32", 0.85, 0.1), "fiscal_year") == "2031-32"
+
+
+def test_letter_in_money_prompts_reread_without_digit_substitution():
+    from ifms_suite.document_facts import (
+        _critical_kind,
+        _candidate_value,
+        _resolve_crop_candidates,
+    )
+
+    value = dict(w("8L,456.00", 0.55, 0.3), recognizer="rapidocr", confidence=0.95)
+    assert _critical_kind(value) == "money"
+    assert _candidate_value(value, "money") is None
+    _resolve_crop_candidates(value, [], "money")
+    assert value["text"] == "8L,456.00"
+    _resolve_crop_candidates(
+        value,
+        [dict(text="81456.00", confidence=0.96, recognizer="tesseract-crop")],
+        "money",
+    )
+    assert value["text"] == "81456.00"
+    assert value["original_text"] == "8L,456.00"
+
+
+def test_new_month_on_continuation_requires_matching_context_and_printed_sequence():
+    def packet(change=None):
+        first = _simple_bill_words() + [
+            w("2031-32", 0.85, 0.08),
+            w("GroupName:Demo", 0.55, 0.96),
+            w("PageNo.1", 0.78, 0.05),
+        ]
+        second = [
+            q.copy()
+            for q in _simple_bill_words()
+            if q["text"] not in ("Employee ID", "RJAB203012345678")
+        ]
+        for q in second:
+            if q["text"] == "October":
+                q["text"] = "November"
+            if q["text"] == "123456789":
+                q["text"] = "123456790"
+        second += [
+            w("2031-32", 0.85, 0.08),
+            w("GroupName:Demo", 0.55, 0.96),
+            w("PageNo.2", 0.78, 0.05),
+        ]
+        if change == "new_profile":
+            second.append(w("Employee ID", 0.5, 0.1))
+        if change == "split_new_profile":
+            second += [w("Employee", 0.5, 0.1), w("ID", 0.56, 0.1)]
+        if change == "different_group":
+            next(q for q in second if q["text"] == "GroupName:Demo")[
+                "text"
+            ] = "GroupName:Other"
+        if change == "restarted_pages":
+            next(q for q in second if q["text"] == "PageNo.2")["text"] = "PageNo.1"
+        if change == "uncertain_previous":
+            next(q for q in first if q["text"] == "RJAB203012345678")[
+                "confidence"
+            ] = 0.1
+        return facts_from_pages([page(first), page(second, 2)])["bills"]
+
+    bills = packet()
+    assert bills[1]["employee_code"] == "RJAB203012345678"
+    assert bills[1]["identity_reliable"]
+    assert bills[1]["complete"]
+    for change in (
+        "new_profile",
+        "split_new_profile",
+        "different_group",
+        "restarted_pages",
+        "uncertain_previous",
+    ):
+        assert not packet(change)[1]["identity_reliable"], change
+
+
+def test_unreadable_gross_cannot_silently_drop_a_salary_month():
+    words = _simple_bill_words()
+    next(q for q in words if q["text"] == "18000.00" and q["box"][0] > 0.5)[
+        "text"
+    ] = "18?00.00"
+    result = facts_from_pages([page(words)])
+    assert result["bills"] == []
+    assert any(
+        i.get("kind") == "bill_row_unresolved"
+        and i.get("blocking") is True
+        and i.get("scope") == "document"
+        for i in result["issues"]
+    )
+
+
+def test_split_employee_name_label_prevents_carry_to_an_unidentified_person():
+    first = _simple_bill_words() + [
+        w("2031-32", 0.85, 0.08),
+        w("GroupName:Demo", 0.55, 0.96),
+    ]
+    next(q for q in first if q["text"] == "18000.00" and q["box"][0] > 0.5)[
+        "text"
+    ] = "18300.00"
+    second = [
+        q for q in header() if q["text"] not in ("Employee ID", "RJAB203012345678")
+    ]
+    second += [
+        w("2031-32", 0.85, 0.08),
+        w("GroupName:Demo", 0.55, 0.96),
+        w("Employee", 0.5, 0.1),
+        w("Name", 0.56, 0.1),
+        w("HDA", 0.31, 0.25),
+        w("300.00", 0.37, 0.25),
+    ]
+    result = facts_from_pages([page(first), page(second, 2)])
+    assert result["bills"][0]["source_pages"] == [1]
+    assert not result["bills"][0]["complete"]

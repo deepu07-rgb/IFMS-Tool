@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from statistics import median
 
-FACTS_VERSION = "geometry-printed-v4"
+FACTS_VERSION = "geometry-printed-v5"
 
 # Fixed recognition gates are independent of reconciliation and expected totals.
 NEURAL_CONFIDENCE = 0.85
@@ -146,13 +146,16 @@ def _heads(words, page, start, end, left, right):
     return result, evidence, issues
 
 
+def _fiscal_year(text):
+    match = re.fullmatch(r"(20\d{2})-(\d{2})", text)
+    if match and (int(match[1]) + 1) % 100 == int(match[2]):
+        return text
+    return None
+
+
 def _page_key(words):
     fy = next(
-        (
-            _text(w)
-            for w in words
-            if _reliable(w) and re.fullmatch(r"20\d{2}-\d{2}", _text(w))
-        ),
+        (_text(w) for w in words if _reliable(w) and _fiscal_year(_text(w))),
         "",
     )
     group = next(
@@ -160,6 +163,27 @@ def _page_key(words):
         "",
     )
     return fy, group
+
+
+def _printed_page_number(words):
+    values = set()
+    for label in words:
+        if label["box"][1] >= 0.2 or not _reliable(label):
+            continue
+        text = _text(label)
+        combined = re.fullmatch(r"PAGE(?:NO)?[.:]*(\d{1,3})", text)
+        if combined:
+            values.add(int(combined[1]))
+        elif re.fullmatch(r"PAGE(?:NO)?[.:]*", text):
+            for value in words:
+                if (
+                    _reliable(value)
+                    and re.fullmatch(r"\d{1,3}", value["text"])
+                    and 0 <= value["box"][0] - label["box"][2] < 0.1
+                    and abs(_y(value) - _y(label)) < 0.018
+                ):
+                    values.add(int(value["text"]))
+    return next(iter(values)) if len(values) == 1 else None
 
 
 def _printed_total(words, gross, geometry, name, page):
@@ -209,6 +233,11 @@ def facts_from_pages(pages):
             w for w in words if w["box"][1] < 0.23 and ID.fullmatch(_text(w))
         ]
         employee = _identity(header_identities)
+        profile_header = any(
+            w["box"][1] < 0.23 and _text(w).startswith(("EMPLOYEE", "EMPLOVEE"))
+            for w in words
+        )
+        printed_page = _printed_page_number(words)
         ga55 = "GA55" in compact or ("ALLOWANCES" in compact and "GROSS" in compact)
         if ga55:
             allowance = next(
@@ -316,6 +345,8 @@ def facts_from_pages(pages):
                 key = _page_key(words)
                 same_document = (
                     not header_identities
+                    and not profile_header
+                    and previous.get("identity_reliable") is True
                     and all(key)
                     and key == previous.get("_page_key")
                     and number == previous["source_pages"][-1] + 1
@@ -351,10 +382,20 @@ def facts_from_pages(pages):
             ]
             if (
                 not header_identities
+                and not profile_header
                 and previous
+                and previous.get("identity_reliable") is True
                 and _page_key(words) == previous.get("_page_key")
                 and all(_page_key(words))
-                and number == previous["source_pages"][-1]
+                and (
+                    number == previous["source_pages"][-1]
+                    or (
+                        number == previous["source_pages"][-1] + 1
+                        and printed_page is not None
+                        and previous.get("_printed_page") is not None
+                        and printed_page == previous["_printed_page"] + 1
+                    )
+                )
             ):
                 inherited_employee = previous["employee_code"]
                 identity_evidence = [
@@ -482,9 +523,38 @@ def facts_from_pages(pages):
                     _issues=flags,
                     _allowance_flags=allowance_flags,
                     _page_key=_page_key(words),
+                    _printed_page=printed_page,
                 )
                 bills.append(bill)
                 previous = bill
+            # An unreadable gross must not erase a visible month/bill row.
+            covered = {
+                (e["text"], tuple(e["box"]))
+                for bill in bills
+                for e in bill["evidence"]
+                if e.get("page") == number and e.get("box")
+            }
+            unseen = [
+                w
+                for w in words
+                if (0.23 if profile_header else 0.12) < _y(w) < summary_start
+                and (
+                    (w["text"] in MONTHS and w["box"][0] < min(0.12, left))
+                    or (re.fullmatch(r"\d{9}", w["text"]) and 0.12 < w["box"][0] < left)
+                )
+                and (w["text"], tuple(w["box"])) not in covered
+            ]
+            if unseen:
+                issues.append(
+                    dict(
+                        page=number,
+                        kind="bill_row_unresolved",
+                        scope="document",
+                        blocking=True,
+                        issue="Visible month/bill rows were not fully represented in extracted records",
+                        evidence=[_evidence(w, number) for w in unseen],
+                    )
+                )
         else:
             previous = None
             if "HOUSE" not in compact or "RENT" not in compact:
@@ -602,6 +672,7 @@ def facts_from_pages(pages):
         flags = bill.pop("_issues")
         allowance_flags = bill.pop("_allowance_flags")
         bill.pop("_page_key", None)
+        bill.pop("_printed_page", None)
         reconciled = sum(
             map(Decimal, bill["allowances"].values()), Decimal(0)
         ) == Decimal(bill["printed_gross"])
@@ -705,9 +776,13 @@ def _overlaps(a, b):
 def _critical_kind(word, is_order=False, rate_x=None):
     text = word["text"]
     if _money(text) is not None or (
-        re.fullmatch(r"[+-]?[\d,.:]+", text) and re.search(r"[.,:]\d{2}$", text)
+        re.fullmatch(r"[+-]?[0-9OoIlLSB?,.:]+", text)
+        and re.search(r"[.,:]\d{2}$", text)
+        and any(c.isdigit() for c in text)
     ):
         return "money"
+    if re.fullmatch(r"20\d{2}-\d{2}", _text(word)):
+        return "fiscal_year"
     if ID.fullmatch(_text(word)) or re.fullmatch(r"[A-Z]{2,5}\d{10,13}", _text(word)):
         return "identity"
     if text in MONTHS:
@@ -736,6 +811,8 @@ def _candidate_value(word, kind):
     text = word["text"].strip()
     if kind == "money":
         return _money(text)
+    if kind == "fiscal_year":
+        return _fiscal_year(_text(word))
     if kind == "identity":
         return _text(word) if ID.fullmatch(_text(word)) else None
     if kind == "month":

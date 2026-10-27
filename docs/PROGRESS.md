@@ -98,3 +98,11 @@ Tested two new private full-PDF samples without entering figures/dates or approv
 Fixed decorated allowance headings and recovery of a reliable independent structural heading when the neural reading is incorrect. Raw readings remain available; monetary confidence gates are unchanged. Added an explicit reviewed HRA-not-payable option with reference/zero-drawn validation and saved audit fields. No employee sample data is committed.
 
 Verification: 95 focused tests passed; full run 262 passed, 14 skipped, and the 13 previously documented `tests/test_expected_totals.py` failures (fixtures 1–13). Independent review found no important issues. Saved-evidence Kana Ram replay remains blocked with one rate review. No packaging was performed; automatic builds stay paused pending further sample testing and resolution of the remaining source-reading gaps.
+
+## Further arrear samples — 27 October 2026
+
+Tested two additional private full-PDF cases: suspension-related pay fixation/increment and a missing HRA month. Separate reviewed-input calculations matched the independently checked payable amounts. A handwritten statement's unchanged component columns were inconsistent with the complete GA55 even though its net difference matched, reinforcing that net equality alone is not an acceptance test. A user-confirmed rate/effective date was retained as human evidence, never injected into the unassisted run.
+
+Fixed recurring source-reading problems in facts version v5: fiscal-period validation and image re-reading; suspicious numeric glyphs trigger crop recognition without digit substitution; new-month continuation identity requires reliable matching context and consecutive printed pages; new-profile header tokens prevent cross-employee carry; visible omitted month/bill rows create document blockers. Original readings and crop evidence remain available.
+
+One new source improved from seven records/six complete to eight/eight complete. The other improved from eight/three complete to eight/four complete. Both unassisted claim attempts remain blocked on unresolved source/order/reference evidence; handwritten statement parsing is still incomplete. No automatic acceptance pass is claimed. Packaging remains paused; no libraries or models were added.

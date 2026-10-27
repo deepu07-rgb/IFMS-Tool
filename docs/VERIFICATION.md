@@ -94,3 +94,11 @@ Fresh private workspaces tested two complete scanned PDFs through GA55 OCR, due-
 Final extraction recovered seven records/five complete in one sample and nine records/three complete in the other. Missing monetary components, continuation identity and unsupported financial order pages remain blocking. No missing digits were reconstructed from expected totals. The private comparison report includes month/component arithmetic, deduction caveats, original failure, and before/after evidence.
 
 Commands: `python -m pytest` — 262 passed, 14 skipped, 13 inherited `tests/test_expected_totals.py` failures; recovery/increment focused suite — 95 passed; `node --check ifms_suite/static/suite.js` and `git diff --check` passed. Independent code review found no important issues. No software build was run.
+
+## Fiscal, money and continuation regressions — 27 October 2026
+
+Fresh application API runs on two additional private PDFs used no numeric/date corrections or review approvals. Their original and final outputs, raw OCR, source-derived evidence, separate reviewed calculations and report are saved outside Git. The recorded final OCR replay exactly reproduced each API's bill and issue arrays. A previous saved-evidence case still returns nine records/eight complete, zero drafts and one rate-review request.
+
+Regression tests were observed failing before the fixes for invalid fiscal periods, letter-containing money tokens, new-month continuation identity and silently omitted rows. Independent review then reproduced a cross-employee risk with split profile labels; both identity-inheritance and allowance-carry regressions now pass after the broader conservative header guard.
+
+Final focused run: 100 passed. Full suite: 267 passed, 14 skipped, 13 inherited failures in `tests/test_expected_totals.py` (fixtures 1–13). The source image crops recovered invalid readings without expected-total arithmetic or digit replacement. Reviewed calculations also verified an unchanged signed recovery and a source/component discrepancy hidden by a matching net total. App PDF/Excel endpoints succeeded for the reviewed drafts. `git diff --check` passed. No software build was performed, and push-triggered packaging remains disabled.
