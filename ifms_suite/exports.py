@@ -84,6 +84,35 @@ def excel(payload, calculation):
     )
     audit.append(["Drawn reference", payload.get("drawn_reference", "Unreviewed")])
     audit.append(["Status", payload.get("status", "draft").upper()])
+    if payload.get("machine_generated"):
+        for key in (
+            "source_import",
+            "source_sha256",
+            "machine_facts_version",
+            "deductions_review_required",
+        ):
+            audit.append([key, str(payload.get(key, ""))])
+        evidence = w.create_sheet("Machine source evidence")
+        evidence.append(["Source import", str(payload.get("source_import", ""))])
+        evidence.append(["SHA256", str(payload.get("source_sha256", ""))])
+        order = payload.get("machine_evidence", {}).get("order", {})
+        for key in ("employee_code", "effective_from", "rate", "source_pages", "human_reviewed", "review_reference"):
+            evidence.append(["Order " + key, str(order.get(key, ""))])
+        for bill in payload.get("machine_evidence", {}).get("bills", []):
+            evidence.append(
+                [
+                    "Bill " + str(bill.get("bill_no", "")),
+                    str(bill.get("pay_month", ""))
+                    + " pages "
+                    + str(bill.get("source_pages", [])),
+                ]
+            )
+            for key, value in bill.get("allowances", {}).items():
+                evidence.append([str(key), str(value)])
+        for row in evidence:
+            for cell in row:
+                cell.data_type = "s"
+
     audit.append(["Entitlement", payload.get("entitlement_type", "salary")])
     for row in audit:
         for cell in row:
@@ -188,7 +217,12 @@ def pdf(payload, calculation):
     c.drawString(
         25,
         y,
-        "Cash payable: INR " + calculation.get("net_payable", calculation["total"]),
+        (
+            "Provisional cash (review deductions): INR "
+            if payload.get("machine_generated")
+            else "Cash payable: INR "
+        )
+        + calculation.get("net_payable", calculation["total"]),
     )
     c.setFont("Helvetica", 8)
     c.drawString(
@@ -201,6 +235,47 @@ def pdf(payload, calculation):
         25,
         "Drafts require review. Check deductions and cash allocation against applicable orders. No digital signature applied.",
     )
+    if payload.get("machine_generated"):
+        from textwrap import wrap
+
+        c.showPage()
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(25, height - 30, "Machine source evidence")
+        order = payload.get("machine_evidence", {}).get("order", {})
+        lines = [
+            "Source import: " + str(payload.get("source_import", "")),
+            "SHA256: " + str(payload.get("source_sha256", "")),
+            "Order employee: "
+            + str(order.get("employee_code", ""))
+            + " effective "
+            + str(order.get("effective_from", ""))
+            + " rate "
+            + str(order.get("rate", ""))
+            + "% pages "
+            + str(order.get("source_pages", [])),
+        ]
+        if order.get("human_reviewed"):
+            lines.append("Human-confirmed rate: " + str(order.get("review_reference", "")))
+        for bill in payload.get("machine_evidence", {}).get("bills", []):
+            lines.append(
+                "Bill "
+                + str(bill.get("bill_no", ""))
+                + " month "
+                + str(bill.get("pay_month", ""))
+                + " pages "
+                + str(bill.get("source_pages", []))
+            )
+            lines.append("Allowances " + str(bill.get("allowances", {})))
+        y = height - 52
+        c.setFont("Helvetica", 9)
+        for line in lines:
+            for fragment in wrap(line, 135):
+                if y < 45:
+                    c.showPage()
+                    y = height - 35
+                    c.setFont("Helvetica", 9)
+                c.drawString(25, y, fragment)
+                y -= 14
     c.save()
     b.seek(0)
     return b

@@ -140,6 +140,15 @@ def main():
                         )
                     )
                     assert "50000" in "".join(result["pages"]), result
+                    machine = json.loads(
+                        req(f"/suite/api/imports/{imported['id']}/automatic_hra", {})
+                    )
+                    assert not machine["claims"], machine
+                    assert any(
+                        name.startswith("rapidocr")
+                        for name in machine["facts"].get("recognizers", [])
+                    ), machine
+
                 print(
                     "Packaged HTTP, calculation, exports, database and real raster OCR checks passed"
                 )

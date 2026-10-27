@@ -71,3 +71,16 @@ Source-reviewed statement/API comparison agrees with corrected monthly figures: 
 A financial regression reproduced a partial statement/library HRA result13000 instead of213 for June21-30. Library due now stays monthly until shared-engine proration and rounding; actual period amounts are not prorated twice. Fresh review found2 further issues: library rounding changed actual drawn paise, and assigning overlapping prior dates alone bypassed credit handling. Both reproduced RED and fixed GREEN: monthly actual amounts retain paise and non-history overlap requires settlement IDs validated against saved paid allocations. History finalization still recalculates reviewed inputs. No Important review findings remain deferred.
 
 Final active gate174 passed14 skipped; full suite175 passed14 skipped and13 inherited V1 expected-total failures in `tests/test_expected_totals.py`, fixtures1.pdf-13.pdf. Actual Chromium lifecycle passed payment review, historyDA/GPF, finalization, Excel/PDF, settlement, digitalGA55, workbook recalculation, custom allowance and full backup, with no external requests or JavaScript errors. Actual current-code statement API/export rerun gives63005/256/62749 and rejects all3 finalizations. No new runtime library or employee document was added to the repository/package. The previous portable artifact predates these source changes; a fresh successful Windows build is required for updated distribution.
+
+
+## Extraction recovery — 27 October 2026
+
+Added offline geometric printed OCR, bill continuation matching, identity/date confidence gates, recognizer disagreement detection, and gross/deduction/net reconciliation. HRA drafts use matched employee sanctions, dated rates, calendar days, complete salary records and validated prior credits. Unresolved financial evidence blocks generation.
+
+The private strict sample recovered 9 bill records (8 complete), including all three relevant regular salary months. Its HRA sanction rate remains uncertain: the app creates no draft and requests one field review against the original row. No manual figures or approvals were entered. Earlier prototype outputs are superseded and are not evidence of an unattended pass.
+
+A narrow rate confirmation flow preserves raw OCR, source hash, review reference and audit timestamp. Human-assisted drafts are labelled in the UI and exports. Synthetic endpoint tests cover review validation, unchanged evidence, source crop, audit and stale review rejection. Reconciliation also rejects unresolved positive prior HRA credits and bill-scoped blockers.
+
+The full run before the final credit guard reported 257 passed, 14 skipped and 13 inherited failures in test_expected_totals.py. A fresh active regression run and final portable package verification are recorded in the completion update. Linux measurement does not establish the Windows installed size; CI must enforce the complete Windows budget.
+
+Final active regression: 257 passed, 14 skipped (legacy expected_totals excluded). Focused recovery tests: 83 passed. Strict browser: zero claims, one blank review field, no numeric/date inputs, approvals, external requests or JavaScript errors. Linux portable payload: 454,854,271 bytes with neural models; system Tesseract, not complete Windows measurement.

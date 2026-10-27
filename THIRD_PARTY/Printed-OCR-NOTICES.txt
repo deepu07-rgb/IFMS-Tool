@@ -1,0 +1,20 @@
+Printed-document recognition components
+
+RapidOCR 1.4.4 and bundled PP-OCR inference models
+https://github.com/RapidAI/RapidOCR
+Declared distribution license: Apache-2.0.
+Model files are supplied by the pinned rapidocr-onnxruntime distribution; their
+bytes are included in the final portable SHA256 manifest. Models are evaluated
+locally; employee documents are not sent to an OCR service.
+
+ONNX Runtime 1.31.0: MIT. https://github.com/microsoft/onnxruntime
+Headless OpenCV 5.0.0.93: Apache-2.0 plus included third-party component notices.
+https://github.com/opencv/opencv-python
+Shapely and GEOS, pyclipper, PyYAML and other transitive dependencies retain their
+upstream notices. Distribution metadata and runtime license files are collected
+in the portable package.
+
+The headless distribution provides the same cv2 interfaces used for OCR without
+GUI/video dependencies. Install the complete requirements.lock with --no-deps;
+allowing RapidOCR to resolve its opencv-python dependency would install a second
+OpenCV distribution and undermine the portable size budget.

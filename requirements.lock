@@ -28,3 +28,14 @@ reportlab==4.5.1
 six==1.17.0
 tzdata==2026.5
 Werkzeug==3.1.9
+# Complete OCR dependency set. Install this lock with --no-deps: the headless
+# distribution supplies cv2 without RapidOCR's redundant GUI OpenCV dependency.
+flatbuffers==25.12.19
+onnxruntime==1.31.0
+opencv-python-headless==5.0.0.93
+protobuf==7.36.2
+pyclipper==1.4.0
+PyYAML==6.0.3
+rapidocr-onnxruntime==1.4.4
+shapely==2.2.0
+tqdm==4.70.1

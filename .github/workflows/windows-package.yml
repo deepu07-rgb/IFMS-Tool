@@ -26,7 +26,7 @@ jobs:
           python-version: "3.12"
       - name: Install locked dependencies and build tools
         run: |
-          python packaging/run_checked.py Dependencies -- python -m pip install -r requirements.lock
+          python packaging/run_checked.py Dependencies -- python -m pip install --no-deps -r requirements.lock
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python packaging/run_checked.py Build-tools -- python -m pip install pyinstaller==6.16.0 py7zr
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

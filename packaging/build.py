@@ -6,6 +6,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def payload_size(root):
+    """Installed payload bytes; library aliases do not duplicate their targets."""
+    root = root.resolve()
+    total = 0
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            try:
+                path.resolve(strict=True).relative_to(root)
+            except (ValueError, OSError, RuntimeError) as exc:
+                raise ValueError(
+                    "Portable symlink target is missing or outside package: "
+                    + str(path)
+                ) from exc
+            total += path.lstat().st_size
+        elif path.is_file():
+            total += path.stat().st_size
+    return total
+
+
+def archive_package(package, destination):
+    import zipfile, stat
+
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(package.rglob("*")):
+            name = package.name + "/" + path.relative_to(package).as_posix()
+            if path.is_symlink():
+                entry = zipfile.ZipInfo(name)
+                entry.create_system = 3
+                entry.external_attr = (stat.S_IFLNK | 0o777) << 16
+                archive.writestr(entry, os.readlink(path))
+            elif path.is_file():
+                archive.write(path, name)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ocr-dir", type=Path)
@@ -54,6 +88,17 @@ def main():
     ]
     for src, dest in data:
         flags += ["--add-data", str(ROOT / src) + os.pathsep + dest]
+    # Include local recognition models/config and upstream distribution notices.
+    flags += [
+        "--collect-data",
+        "rapidocr_onnxruntime",
+        "--copy-metadata",
+        "rapidocr-onnxruntime",
+        "--copy-metadata",
+        "onnxruntime",
+        "--copy-metadata",
+        "opencv-python-headless",
+    ]
     flags += [
         "--collect-submodules",
         "ifms_engine",
@@ -69,7 +114,7 @@ def main():
     run(flags)
     package = ROOT / "dist" / "IFMSWorkspace"
     files = [p for p in package.rglob("*") if p.is_file()]
-    size = sum(p.stat().st_size for p in files)
+    size = payload_size(package)
     if size >= 500_000_000:
         raise SystemExit(
             f"Installed package is {size:,} bytes; limit is strictly below 500,000,000 bytes"
@@ -97,7 +142,7 @@ def main():
         },
     }
     (package / "PACKAGE-MANIFEST.json").write_text(json.dumps(report, indent=2))
-    size = sum(p.stat().st_size for p in package.rglob("*") if p.is_file())
+    size = payload_size(package)
     if size >= 500_000_000:
         raise SystemExit("Manifest makes package exceed size budget")
     (ROOT / "dist" / "size-report.json").write_text(
@@ -111,12 +156,7 @@ def main():
             indent=2,
         )
     )
-    shutil.make_archive(
-        str(ROOT / "dist" / ("IFMSWorkspace-" + sys.platform)),
-        "zip",
-        ROOT / "dist",
-        "IFMSWorkspace",
-    )
+    archive_package(package, ROOT / "dist" / ("IFMSWorkspace-" + sys.platform + ".zip"))
     print("Installed package bytes:", size)
 
 

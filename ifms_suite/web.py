@@ -192,6 +192,8 @@ def claims():
                 ]
             )
         p = request.get_json() or {}
+        if p.get("source") == "automatic_hra":
+            raise ValueError("Machine drafts must be created from their source import")
         if not p.get("employee_code") or not p.get("allowance"):
             raise ValueError("Employee and allowance required")
         from datetime import date
@@ -236,7 +238,12 @@ def finalize(id):
         payload = json.loads(row["payload"])
         from .payroll import guard_prior_arrears
 
-        guard_prior_arrears(db, payload)
+        if payload.get("source") == "automatic_hra":
+            from .automatic_hra import validate_automatic_draft
+
+            validate_automatic_draft(db, payload, json.loads(row["calculation"]), p)
+        else:
+            guard_prior_arrears(db, payload)
         if payload.get("source") == "history":
             from .payroll import calculate_payload
 
@@ -246,7 +253,7 @@ def finalize(id):
                 raise ValueError(
                     "Reviewed history or rates changed. Prepare a fresh draft and review its calculation."
                 )
-        else:
+        elif payload.get("source") != "automatic_hra":
             from .payroll import validate_manual_settlements
 
             validate_manual_settlements(db, payload)
@@ -652,6 +659,11 @@ register_groups(suite)
 from .payroll import register_payroll
 
 register_payroll(suite)
+
+
+from .automatic_hra import register_automatic_hra
+
+register_automatic_hra(suite)
 
 
 def register_suite(app):

@@ -470,9 +470,36 @@ function renderPaymentReview() {
     }
   };
 }
+function renderAutomaticHra(result, id) {
+$("automaticHraResults").innerHTML = `<h2>HRA source reconciliation</h2><p>${escapeHTML(result.notice)}</p>${result.blockers.map(x => `<p class="warning">${escapeHTML(x)}</p>`).join("")}${result.claims.map(c => `<p>${c.human_assisted ? "Human-assisted draft" : "Machine-generated draft"} #${c.id} · ${escapeHTML(c.employee_code)} · HRA INR ${escapeHTML(c.calculation.total)} <a href="/suite/api/claims/${c.id}/pdf">PDF</a> <a href="/suite/api/claims/${c.id}/excel">Excel</a></p>`).join("")}<details><summary>Extracted facts and source evidence</summary><pre>${escapeHTML(JSON.stringify(result.facts, null, 2))}</pre></details>`;
+  $("automaticHraResults").innerHTML += (result.review_requests || []).map(r => `<form data-rate-review="${escapeHTML(r.request_id)}" data-import="${Number(id)}" data-version="${escapeHTML(r.facts_version)}"><h3>Check one source field</h3><p>${escapeHTML(r.employee_code)} · effective ${escapeHTML(r.effective_from)} · original page ${r.page}</p><img src="/suite/api/imports/${Number(id)}/fact_review/${escapeHTML(r.request_id)}/image" alt="Original sanction row" style="max-width:100%"><label>HRA percentage in this row<input name="rate" type="number" min="0.01" max="100" step="0.01" required></label><label>Source reference<input name="reference" value="Original PDF page ${r.page}" required></label><label><span>I checked this field against the original</span><input name="reviewed" type="checkbox" required></label><button class="action">Confirm this field and build draft</button><p>This confirmation is recorded as human review, not automatic recognition.</p></form>`).join("");
+}
+$("automaticHraResults").onsubmit = async e => {
+  e.preventDefault();
+  const form=e.target;
+  if (!form.dataset.rateReview) return;
+  const button=form.querySelector('button'); button.disabled=true;
+  try {
+    const result=await post(`imports/${form.dataset.import}/fact_review`,{request_id:form.dataset.rateReview,facts_version:form.dataset.version,rate:form.elements.rate.value,reference:form.elements.reference.value,reviewed:form.elements.reviewed.checked});
+    await refresh();renderAutomaticHra(result,form.dataset.import);
+    notify(result.claims.length ? "Draft built with the recorded human field confirmation" : "Other source facts still need review");
+  } catch(x) {notify(x.message);} finally {button.disabled=false;}
+};
 $("importsList").onclick = async (e) => {
-  const b = e.target.closest("[data-review-import],[data-ocr]");
+  const b = e.target.closest("[data-review-import],[data-ocr],[data-automatic-hra]");
   if (!b) return;
+  if (b.dataset.automaticHra) {
+    b.disabled = true;
+    notify("Reading printed salary and sanction records locally. This can take a few minutes.");
+    try {
+      const result = await post(`imports/${b.dataset.automaticHra}/automatic_hra`, {});
+      await refresh();
+      renderAutomaticHra(result, b.dataset.automaticHra);
+      notify(result.claims.length ? "Machine draft saved; verify evidence and deductions before final approval" : "Draft blocked: source facts need review. No figures were guessed.");
+    } catch (x) { notify(x.message); }
+    finally { b.disabled = false; }
+    return;
+  }
   if (b.dataset.reviewImport) {
     const id = Number(b.dataset.reviewImport),
       r = importRecords.find((x) => x.id === id);
@@ -503,6 +530,7 @@ $("claimsList").onsubmit = async (e) => {
     try {
       const p = Object.fromEntries(new FormData(f));
       p.reviewed = f.elements.reviewed.checked;
+      if (f.elements.machine_facts_reviewed) p.machine_facts_reviewed = f.elements.machine_facts_reviewed.checked;
       if (!p.payment_id) delete p.payment_id;
       await post(`claims/${f.dataset.settlement}/settlement`, p);
       notify("Actual full settlement linked to statement");
@@ -516,6 +544,7 @@ $("claimsList").onsubmit = async (e) => {
   try {
     const p = Object.fromEntries(new FormData(f));
     p.reviewed = f.elements.reviewed.checked;
+      if (f.elements.machine_facts_reviewed) p.machine_facts_reviewed = f.elements.machine_facts_reviewed.checked;
     await post(`claims/${f.dataset.claim}/finalize`, p);
     notify("Statement finalized; calculation snapshot is retained");
     await refresh();
@@ -599,7 +628,7 @@ async function refresh() {
   $("importsList").innerHTML = imports
     .map(
       (i) =>
-        `<div class="card"><h2>${escapeHTML(i.filename)}</h2><p>${escapeHTML(i.status)} · ${escapeHTML(i.payload.notice || "Review source before using amounts")}</p><a class="action" target="_blank" rel="noopener" href="/suite/api/imports/${i.id}/source">View source</a><a class="action" href="/suite/api/imports/${i.id}/pdf">PDF export</a><a class="action" href="/suite/api/imports/${i.id}/excel">Excel export</a>${i.status !== "reviewed" ? `<button class="action" data-review-import="${i.id}">${i.payload.kind === "due_drawn" ? "Check / recalculate statement" : "Review / enter payments"}</button>${i.payload.scan_pages?.length ? `<button class="action" data-ocr="${i.id}">Run local OCR</button>` : ""}` : ""}${i.payload.extracted ? outerSummary(i.payload.extracted) : ""}<p>${i.payload.ga55?.payments.length ?? 0} candidate payment entries</p><details><summary>Source text (${i.payload.pages.length} pages)</summary>${i.payload.pages.map((t, n) => `<h3>Page ${n + 1}</h3><pre>${escapeHTML(t || "No selectable text")}</pre>`).join("")}</details></div>`,
+        `<div class="card"><h2>${escapeHTML(i.filename)}</h2><p>${escapeHTML(i.status)} · ${escapeHTML(i.payload.notice || "Review source before using amounts")}</p><a class="action" target="_blank" rel="noopener" href="/suite/api/imports/${i.id}/source">View source</a><a class="action" href="/suite/api/imports/${i.id}/pdf">PDF export</a><a class="action" href="/suite/api/imports/${i.id}/excel">Excel export</a>${i.status !== "reviewed" ? `<button class="action" data-review-import="${i.id}">${i.payload.kind === "due_drawn" ? "Check / recalculate statement" : "Review / enter payments"}</button>${i.payload.scan_pages?.length ? `<button class="action" data-ocr="${i.id}">Run local OCR</button>` : ""}` : ""}${i.payload.file_kind === "pdf" ? `<button class="action" data-automatic-hra="${i.id}">Build HRA draft from PDF</button>` : ""}${i.payload.extracted ? outerSummary(i.payload.extracted) : ""}<p>${i.payload.ga55?.payments.length ?? 0} candidate payment entries</p><details><summary>Source text (${i.payload.pages.length} pages)</summary>${i.payload.pages.map((t, n) => `<h3>Page ${n + 1}</h3><pre>${escapeHTML(t || "No selectable text")}</pre>`).join("")}</details></div>`,
     )
     .join("");
   renderPersistent(
@@ -607,7 +636,7 @@ async function refresh() {
     claims
       .map(
         (c) =>
-          `<div class="card"><h2>#${c.id} ${escapeHTML(c.payload.employee_code)} · ${escapeHTML(c.payload.allowance)}</h2><p>${escapeHTML(c.payload.start)} — ${escapeHTML(c.payload.end)} · ${escapeHTML(c.status)} · gross INR ${escapeHTML(c.calculation.total)} · cash INR ${escapeHTML(c.calculation.net_payable ?? c.calculation.total)}</p><a class="action" href="/suite/api/claims/${c.id}/excel">Excel</a><a class="action" href="/suite/api/claims/${c.id}/pdf">PDF</a>${c.status === "draft" ? `<form data-claim="${c.id}"><label>Rate / order reference<input name="rule_reference" required></label><label>Drawn-payment references<input name="drawn_reference" required></label><label><span>Inputs & rules checked</span><input name="reviewed" type="checkbox" required></label><button class="action">Finalize reviewed statement</button></form>` : c.status === "finalized" ? `<form data-settlement="${c.id}"><h3>Link actual full settlement</h3><p>Confirm payment or GPF credit against the external bill / GA55. This permits later rate revisions to deduct this settled arrear.</p><label>Existing reviewed payment ID (if already imported)<input name="payment_id" type="number"></label><label>Otherwise, actual arrear bill number<input name="bill_no"></label><label>Actual payment / credit month<input name="pay_month" type="month"></label><label>GA55 / external reference<input name="reference" required></label><label><span>Full amount paid or credited; source checked</span><input name="reviewed" type="checkbox" required></label><button class="action">Record settlement</button></form>` : ""}</div>`,
+          `<div class="card"><h2>#${c.id} ${escapeHTML(c.payload.employee_code)} · ${escapeHTML(c.payload.allowance)}</h2>${c.payload.machine_generated ? `<p>${c.payload.machine_evidence?.order?.human_reviewed ? "Human-assisted source draft" : "Machine-generated source draft"} · check eligibility and deductions before final approval</p>` : ""}<p>${escapeHTML(c.payload.start)} — ${escapeHTML(c.payload.end)} · ${escapeHTML(c.status)} · gross INR ${escapeHTML(c.calculation.total)} · cash INR ${escapeHTML(c.calculation.net_payable ?? c.calculation.total)}</p><a class="action" href="/suite/api/claims/${c.id}/excel">Excel</a><a class="action" href="/suite/api/claims/${c.id}/pdf">PDF</a>${c.status === "draft" ? `<form data-claim="${c.id}"><label>Rate / order reference<input name="rule_reference" required></label><label>Drawn-payment references<input name="drawn_reference" required></label>${c.payload.machine_generated ? `<label><span>Machine-extracted identity, dates, amounts, eligibility and deductions checked</span><input name="machine_facts_reviewed" type="checkbox" required></label>` : ""}<label><span>Inputs & rules checked</span><input name="reviewed" type="checkbox" required></label><button class="action">Finalize reviewed statement</button></form>` : c.status === "finalized" ? `<form data-settlement="${c.id}"><h3>Link actual full settlement</h3><p>Confirm payment or GPF credit against the external bill / GA55. This permits later rate revisions to deduct this settled arrear.</p><label>Existing reviewed payment ID (if already imported)<input name="payment_id" type="number"></label><label>Otherwise, actual arrear bill number<input name="bill_no"></label><label>Actual payment / credit month<input name="pay_month" type="month"></label><label>GA55 / external reference<input name="reference" required></label><label><span>Full amount paid or credited; source checked</span><input name="reviewed" type="checkbox" required></label><button class="action">Record settlement</button></form>` : ""}</div>`,
       )
       .join(""),
   );
@@ -771,6 +800,7 @@ $("employeeHistory").onsubmit = async (e) => {
   try {
     const p = Object.fromEntries(new FormData(f));
     p.reviewed = f.elements.reviewed.checked;
+      if (f.elements.machine_facts_reviewed) p.machine_facts_reviewed = f.elements.machine_facts_reviewed.checked;
     if (f.dataset.monthlyAllocation) {
       p.rows = [...f.querySelectorAll("tbody tr")].map((tr) =>
         Object.fromEntries(
@@ -1001,6 +1031,7 @@ $("incrementForm").onsubmit = async (e) => {
     p.start = p.month + "-01";
     p.end = p.month + "-" + new Date(Date.UTC(year, month, 0)).getUTCDate();
     p.reviewed = f.elements.reviewed.checked;
+      if (f.elements.machine_facts_reviewed) p.machine_facts_reviewed = f.elements.machine_facts_reviewed.checked;
     p.drawn = {};
     for (const head of ["BASIC", "DA", "HRA", "HDA"])
       p.drawn[head] = p["drawn_" + head];
