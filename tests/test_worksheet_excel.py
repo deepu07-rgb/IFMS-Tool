@@ -127,3 +127,38 @@ def test_monthly_input_headers_cannot_be_silently_remapped():
     stream.seek(0)
     with pytest.raises(ValueError, match="header|template"):
         import_workbook(stream)
+
+
+def test_excel_can_leave_unused_trailing_rows_blank(tmp_path):
+    """Recalculate real formulas; deleting/clearing a spare row must not hide totals."""
+    import shutil, subprocess
+    from ifms_suite.worksheet_excel import export_workbook
+
+    executable = shutil.which("soffice")
+    if not executable:
+        pytest.skip("Development LibreOffice unavailable; no runtime dependency")
+    p = example()
+    p["rows"].append({})
+    source = tmp_path / "inputs.xlsx"
+    source.write_bytes(export_workbook(p).read())
+    output = tmp_path / "calculated"
+    output.mkdir()
+    process = subprocess.run(
+        [
+            executable,
+            "--headless",
+            "--convert-to",
+            "xlsx",
+            "--outdir",
+            str(output),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    w = load_workbook(output / "inputs.xlsx", data_only=True)
+    assert w["Due drawn statement"]["AA6"].value == 4960
+    assert w["Due drawn statement"]["AA7"].value is None
+    assert w["Due drawn statement"]["AA8"].value == 4960

@@ -2,6 +2,7 @@
 
 from datetime import date
 import json
+import math
 from flask import request, jsonify, send_file
 
 from .storage import database
@@ -22,7 +23,31 @@ from .worksheet_ledger import (
 from .supplied_form import export_supplied_pdf
 
 
+def _validate_shape(payload):
+    """Incomplete scalar inputs are drafts; invalid containers are not records."""
+    if not isinstance(payload, dict) or not isinstance(payload.get("rows"), list):
+        raise ValueError("Expected a worksheet object with a monthly rows list")
+    if len(payload["rows"]) > 120 or any(
+        not isinstance(row, dict) for row in payload["rows"]
+    ):
+        raise ValueError("Use up to 120 monthly row objects")
+    for key in ("employee_code", "employee_name", "kind", "rounding", "template_id"):
+        if payload.get(key) is not None and not isinstance(payload[key], str):
+            raise ValueError("Worksheet " + key + " must be text")
+    if "include_hda" in payload and not isinstance(payload["include_hda"], bool):
+        raise ValueError("Include HDA must be true or false")
+    for row in payload["rows"]:
+        for value in row.values():
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                raise ValueError(
+                    "Monthly inputs must be literal text, numbers or check values"
+                )
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError("Monthly inputs must be finite numbers")
+
+
 def _result(db, payload):
+    _validate_shape(payload)
     result = calculate_worksheet(payload)
     errors = linked_errors(db, payload)
     if errors:

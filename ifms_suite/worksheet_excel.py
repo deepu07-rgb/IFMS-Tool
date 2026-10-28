@@ -298,7 +298,8 @@ def export_workbook(payload):
         statement.cell(4, 22 + n, f'=IF(Setup!$B$7="jodhpur_classic","{a}","{b}")')
     total_row = len(rows) + 6
     check_col = get_column_letter(last_check)
-    all_ready = f"COUNTIF('Monthly inputs'!{check_col}6:{check_col}{total_row-1},\"OK\")={len(rows)}"
+    checks = f"'Monthly inputs'!{check_col}6:{check_col}{total_row-1}"
+    all_ready = f'AND(COUNTIF({checks},"INCOMPLETE")=0,COUNTIF({checks},"OK")>0)'
     for col in range(4, 28):
         letter = get_column_letter(col)
         statement.cell(
@@ -306,6 +307,8 @@ def export_workbook(payload):
         )
     statement.oddFooter.center.text = "DRAFT — CHECK INPUT STATUS BEFORE SIGNING"
     statement.freeze_panes = "D6"
+    statement.page_setup.fitToHeight = 0
+    statement.print_title_rows = "1:5"
     guide_lines = [
         "QUICK START",
         "1. In Setup enter employee, claim type, rupee/paise rounding and the supplied form variant.",
@@ -316,6 +319,7 @@ def export_workbook(payload):
         "6. Enter only ADDITIONAL deductions from this arrear, not the entire salary deductions. Already-deducted GPF and SIF in the newer form are disclosures, not additional subtraction.",
         "7. Add all four references, set both checks to Yes, and ensure every INPUT CHECK is OK. The statement then displays the calculated amounts and totals.",
         "8. Import this workbook back into Excel Arrear Maker for independent recalculation, saved revisions and PDF. Statement formulas/cached results are ignored on import; input cells must contain literal values.",
+        "For fewer months, clear all editable inputs in unused trailing rows. Keep the formula rows and columns in place. Use the app to generate a different date range or rebuild the form.",
         "DATES AND ROUNDING",
         "Dates include both endpoints. Calendar month length is used, including leap February. Each due/drawn head is rounded separately after proration; monthly differences are then added.",
         "period: show only the selected days. whole_month: retain original drawn pay for unaffected days and show a full monthly drawn salary. Prior payments and extra deductions are exact allocated amounts and never prorated again.",
@@ -428,7 +432,12 @@ def _check_formula(i):
         ]
         choice = f'IF(Setup!B7="{template}",AND({",".join(checks)}),{choice})'
     parts.append(choice)
-    return "=IFERROR(IF(AND(" + ",".join(parts) + '),"OK","INCOMPLETE"),"INCOMPLETE")'
+    used = f"COUNTA('Monthly inputs'!A{i}:{get_column_letter(len(COLUMNS))}{i})"
+    return (
+        f'=IF({used}=0,"UNUSED",IFERROR(IF(AND('
+        + ",".join(parts)
+        + '),"OK","INCOMPLETE"),"INCOMPLETE"))'
+    )
 
 
 def import_workbook(stream):

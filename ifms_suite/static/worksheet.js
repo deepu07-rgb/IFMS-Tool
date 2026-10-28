@@ -2,7 +2,7 @@
 
 // Human-entered literals are the calculation input. OCR and spreadsheet formulas
 // never replace these figures. Saved drafts, revisions and ledger links live on the server.
-const worksheetState = {schema:null, payload:null, id:null, revision:null, dirty:false, tab:'drawn', result:null, salaryRecords:null, localPdf:null};
+const worksheetState = {schema:null, payload:null, id:null, revision:null, dirty:false, tab:'drawn', result:null, salaryRecords:null, localPdf:null, epoch:0, saving:null};
 const worksheetMeta = ['employee_code','employee_name','kind','rounding','template_id','include_hda'];
 const worksheetHeads = ['BASIC','DA','HRA','HDA','CCA'];
 const worksheetForm = $('worksheetSetup');
@@ -18,6 +18,7 @@ function worksheetCollect() {
   return p;
 }
 function worksheetChanged() {
+  worksheetState.epoch++;
   worksheetState.dirty = true;
   worksheetState.result = null;
   $('worksheetSaveStatus').textContent = `${worksheetState.id ? 'Draft #'+worksheetState.id+' · revision '+worksheetState.revision : 'New draft'} · unsaved edits`;
@@ -26,6 +27,7 @@ function worksheetChanged() {
   $('worksheetTables').querySelectorAll('.worksheet-invalid').forEach(e=>e.classList.remove('worksheet-invalid'));
 }
 function worksheetSet(payload, saved=null) {
+  worksheetState.epoch++;
   worksheetState.payload = structuredClone(payload);
   worksheetState.id = saved?.id ?? null;
   worksheetState.revision = saved?.revision ?? null;
@@ -211,32 +213,70 @@ $('worksheetErrors').onclick = e=>{
   const input=[...$('worksheetTables').querySelectorAll('[data-key]')].find(el=>Number(el.dataset.row)===err.row&&el.dataset.key===key);input?.focus();
 };
 async function worksheetSave() {
-  const payload=worksheetCollect();
-  const path='worksheets'+(worksheetState.id?'/'+worksheetState.id:'');
-  const data=await post(path,{payload,revision:worksheetState.revision});
-  worksheetSet(data.payload,data);await loadWorksheetWorkspace();
-  $('worksheetSaved').value=String(data.id);return data;
+  // Coalesce simultaneous Save/Export requests. Keep inputs editable while a
+  // request runs, but never replace newer edits with the older server snapshot.
+  if (worksheetState.saving) return worksheetState.saving;
+  const payload=structuredClone(worksheetCollect()), epoch=worksheetState.epoch, originalId=worksheetState.id;
+  const path='worksheets'+(originalId?'/'+originalId:'');
+  const revision=worksheetState.revision;
+  worksheetState.saving=(async()=>{
+    const data=await post(path,{payload,revision});
+    if (worksheetState.id!==originalId) return data;
+    if (worksheetState.epoch===epoch) worksheetSet(data.payload,data);
+    else {
+      worksheetState.id=data.id;worksheetState.revision=data.revision;worksheetState.dirty=true;
+      $('worksheetSaveStatus').textContent=`Draft #${data.id} saved an earlier version. Newer edits remain unsaved.`;
+    }
+    await loadWorksheetWorkspace();
+    if (!worksheetState.dirty) worksheetRenderResult(data.result);
+    $('worksheetSaved').value=String(data.id);return data;
+  })();
+  try { return await worksheetState.saving; }
+  finally { worksheetState.saving=null; }
 }
-$('worksheetCalculate').onclick=e=>worksheetBusy(e.target,async()=>worksheetRenderResult(await post('worksheets/calculate',worksheetCollect())));
+async function worksheetPreserveBeforeSwitch() {
+  if (worksheetState.saving) await worksheetState.saving;
+  const p=worksheetCollect();
+  if (worksheetState.dirty && (p.rows.length || p.employee_code || p.employee_name)) await worksheetSave();
+  if (worksheetState.dirty && (p.rows.length || p.employee_code || p.employee_name)) throw Error('Inputs changed while saving. Save the current edits before switching drafts.');
+}
+$('worksheetCalculate').onclick=e=>worksheetBusy(e.target,async()=>{
+  const payload=structuredClone(worksheetCollect()), epoch=worksheetState.epoch;
+  const result=await post('worksheets/calculate',payload);
+  if (worksheetState.epoch===epoch) worksheetRenderResult(result);
+  else notify('Inputs changed during calculation. Choose Check and calculate again for the current entries.');
+});
 $('worksheetSave').onclick=e=>worksheetBusy(e.target,worksheetSave);
 for(const [id,ext] of [['worksheetExcel','excel'],['worksheetPdf','pdf']])$(id).onclick=e=>worksheetBusy(e.target,async()=>{
   const data=await worksheetSave();
+  if(worksheetState.dirty || worksheetState.id!==data.id)throw Error('Inputs changed during saving. Save the current edits before export.');
+  const exportEpoch=worksheetState.epoch;
   if(ext==='pdf'&&data.result.status!=='ready')throw Error('Complete the highlighted fields and source checks before PDF export.');
   const response=await fetch(`/suite/api/worksheets/${data.id}/${ext}`);
   if(!response.ok){const err=await response.json();throw Error(err.error||'Export failed');}
-  const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.download=`IFMS-Due-Drawn-${data.id}.${ext==='excel'?'xlsx':'pdf'}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const blob=await response.blob();
+  if(worksheetState.epoch!==exportEpoch)throw Error('Inputs changed during export. Export again after checking the current entries.');
+  const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`IFMS-Due-Drawn-${data.id}.${ext==='excel'?'xlsx':'pdf'}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 $('worksheetOpen').onclick=e=>worksheetBusy(e.target,async()=>{
   const id=Number($('worksheetSaved').value);if(!id)throw Error('Choose a saved draft.');
-  const data=await api('worksheets/'+id);worksheetSet(data.payload,data);
+  await worksheetPreserveBeforeSwitch();
+  const epoch=worksheetState.epoch;
+  const data=await api('worksheets/'+id);
+  if(worksheetState.epoch!==epoch)throw Error('Inputs changed while opening the draft. Save them before opening another draft.');
+  worksheetSet(data.payload,data);
 });
-$('worksheetNew').onclick=()=>{
+$('worksheetNew').onclick=e=>worksheetBusy(e.target,async()=>{
+  await worksheetPreserveBeforeSwitch();
   worksheetState.id=null;worksheetState.revision=null;worksheetCollect();worksheetState.payload.rows=[];
   worksheetChanged();worksheetRender();notify('Separate draft started. Previously saved drafts remain available above.');
-};
+});
 $('worksheetImportForm').onsubmit=e=>{
   e.preventDefault();worksheetBusy(e.target.querySelector('button'),async()=>{
+    await worksheetPreserveBeforeSwitch();
+    const epoch=worksheetState.epoch;
     const data=await api('worksheets/preview-import',{method:'POST',body:new FormData(e.target)});
+    if(worksheetState.epoch!==epoch)throw Error('Inputs changed while importing. Save them before replacing the current draft.');
     worksheetSet(data.payload);worksheetRenderResult(data.result);notify('Workbook inputs loaded and recalculated. Save to keep a new draft; imported formula totals were ignored.');
   });
 };

@@ -3,6 +3,7 @@
 from copy import deepcopy
 from io import BytesIO
 import json
+import pytest
 from openpyxl import load_workbook
 from test_suite_workflow import client
 from test_worksheet import example
@@ -226,6 +227,106 @@ def test_salary_preview_does_not_save_or_approve_records(client):
     )
     assert preview.status_code == 200, preview.data
     assert preview.json["records"][0]["reviewed"] is False
+    assert (
+        client.get("/suite/api/ledger?employee_code=SYN-01").json["payment_count"] == 0
+    )
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [None, {}, "not rows", [None], [[]], [{"salary_reference": {"nested": "invalid"}}]],
+)
+def test_invalid_draft_containers_are_rejected_without_poisoning_saved_work(
+    client, rows
+):
+    p = example()
+    good = client.post("/suite/api/worksheets", json={"payload": p})
+    assert good.status_code == 201
+    p["rows"] = rows
+    response = client.post("/suite/api/worksheets", json={"payload": p})
+    assert response.status_code == 400
+    listing = client.get("/suite/api/worksheets")
+    assert listing.status_code == 200
+    assert len(listing.json) == 1
+    response = client.post(
+        f"/suite/api/worksheets/{good.json['id']}", json={"payload": p, "revision": 1}
+    )
+    assert response.status_code == 400
+    assert client.get(f"/suite/api/worksheets/{good.json['id']}").json["revision"] == 1
+
+
+def test_empty_but_well_formed_draft_remains_saveable(client):
+    p = example(rows=[])
+    saved = client.post("/suite/api/worksheets", json={"payload": p})
+    assert saved.status_code == 201
+    assert saved.json["result"]["status"] == "incomplete"
+    assert client.get("/suite/api/worksheets").json[0]["months"] == 0
+
+
+def test_partial_saved_salary_cannot_be_reinterpreted_as_full_month_drawn(client):
+    from ifms_suite.storage import database
+    from ifms_suite.payroll import reviewed_payment
+    from ifms_suite.ledger import ledger_payments
+    from ifms_suite.worksheet_ledger import snapshot
+
+    record = salaries()[0]
+    record.update(
+        allowances=dict(
+            BASIC="16000", DA="9600", HRA="0", HDA="0", CCA="0", OTHER_ALLOWANCES="0"
+        ),
+        deductions={},
+        printed_gross="25600",
+        printed_deductions="0",
+        printed_net="25600",
+        reviewed=True,
+        bill_type="Regular salary",
+        covered_dates={"start": "2040-07-16", "end": "2040-07-31"},
+        monthly_basic="31000",
+    )
+    with client.application.app_context(), database() as db:
+        pid = reviewed_payment(db, record)
+        linked = ledger_payments(db, "SYN-01")[0]
+    response = client.get(
+        "/suite/api/worksheets/ledger-load?employee_code=SYN-01&start=2040-07-16&end=2040-07-31"
+    )
+    assert response.status_code == 400
+    assert "full-month" in response.json["error"]
+    p = example()
+    row = p["rows"][0]
+    row.update(
+        start="2040-07-16", ledger_payment_id=pid, ledger_snapshot=snapshot(linked)
+    )
+    row.update(
+        {
+            "drawn_" + h: record["allowances"][h]
+            for h in ("BASIC", "DA", "HRA", "HDA", "CCA")
+        }
+    )
+    result = client.post("/suite/api/worksheets/calculate", json=p).json
+    assert result["status"] == "incomplete"
+    assert any(
+        e["field"] == "ledger_snapshot" and "full-month" in e["message"]
+        for e in result["errors"]
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("allowances", None),
+        ("deductions", None),
+        ("allowances", ["BASIC", "DA", "HRA", "HDA", "CCA", "OTHER_ALLOWANCES"]),
+    ],
+)
+def test_malformed_salary_components_are_validation_errors_without_saves(
+    client, field, value
+):
+    records = salaries()
+    records[0][field] = value
+    response = client.post(
+        "/suite/api/worksheets/salary-save", json={"records": records, "reviewed": True}
+    )
+    assert response.status_code == 400
     assert (
         client.get("/suite/api/ledger?employee_code=SYN-01").json["payment_count"] == 0
     )

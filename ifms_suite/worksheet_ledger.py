@@ -47,6 +47,26 @@ def snapshot(record):
     ).hexdigest()
 
 
+def require_full_month_salary(record):
+    """This worksheet accepts monthly actuals, not amounts for a paid subperiod."""
+    month = record.get("pay_month", "")
+    first = _date(month + "-01")
+    last = date(first.year, first.month, monthrange(first.year, first.month)[1])
+    for key in ("covered_dates", "entitlement_period"):
+        coverage = record.get(key)
+        if coverage is not None and coverage != {"start": str(first), "end": str(last)}:
+            raise ValueError(
+                "This salary covers part of a month; enter explicitly reviewed full-month amounts manually instead of reusing partial actuals"
+            )
+    monthly_basic = record.get("monthly_basic")
+    if monthly_basic is not None and money(monthly_basic) != money(
+        record.get("allowances", {}).get("BASIC")
+    ):
+        raise ValueError(
+            "Actual basic differs from the recorded monthly basic; confirm full-month amounts manually before using this salary"
+        )
+
+
 def load_ledger_rows(db, code, start, end):
     code = identity(code)
     if not code:
@@ -63,6 +83,7 @@ def load_ledger_rows(db, code, start, end):
         if not records:
             continue
         record = records[0]
+        require_full_month_salary(record)
         for head in HEADS:
             if head in record["allowances"]:
                 row["drawn_" + head] = record["allowances"][head]
@@ -104,6 +125,7 @@ def linked_errors(db, payload):
                 raise ValueError(
                     "Saved salary source changed or is missing; reload the ledger"
                 )
+            require_full_month_salary(record)
             if payment_class(record) != "regular_salary" or record[
                 "pay_month"
             ] != row.get("month"):
@@ -146,6 +168,13 @@ def validate_salary(record):
     month = result["pay_month"]
     if len(month) != 7 or str(_date(month + "-01"))[:7] != month:
         raise ValueError("Salary month must be YYYY-MM")
+    if not isinstance(result.get("allowances"), dict) or not isinstance(
+        result.get("deductions"), dict
+    ):
+        raise ValueError(
+            "Salary allowances and deductions must be named component objects"
+        )
+    require_full_month_salary(result)
     if set(result.get("allowances", {})) != set((*HEADS, "OTHER_ALLOWANCES")) or set(
         result.get("deductions", {})
     ) != {"TOTAL_DEDUCTIONS"}:

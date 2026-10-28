@@ -211,3 +211,15 @@ Actual browser source/grid checks showed the incorrect readings beside their
 original crops, with no JavaScript errors. Payroll documents, screenshots,
 per-field truth and reports remain private outside Git. Final bundling is paused;
 no installed-size or production-readiness claim is made.
+
+## Excel-first assisted workflow — 28 October 2026
+
+- Full repository suite: **577 passed, 14 skipped**, 81.12 seconds; log `/tmp/ifms-excel-final-suite.log`.
+- `tests/test_worksheet.py`: independent known arithmetic including partial dates, whole-month unaffected pay, prior credits, both supplied deduction layouts, negative recovery and missing/invalid values.
+- `tests/test_worksheet_excel.py`: editable formula coordinates, literal text protection, safe round trip ignoring altered statement totals, formula-input rejection, structured salary template, header validation; actual LibreOffice recalculation for unused trailing rows.
+- `tests/test_worksheet_routes.py`: saved revisions/audit, conflict protection, incomplete PDF block, independent workbook recomputation, full salary reconciliation, atomic duplicate rejection, linked source revalidation and rejection of partial-month actuals as full-month amounts. Malformed records cannot poison saved work.
+- Actual LibreOffice matrix: 32 workbooks, 768 financial cells matching the Decimal calculator, two rounding policies, two presentation modes, four claim types and both form variants. Formula arithmetic is unchanged by the separately tested unused-row guard.
+- Real full-app Chromium flow: salary workbook preview/confirmation/save; load linked employee month; HRA result4960; save/reload; formula Excel and supplied PDF downloads; workbook reimport; explicit detachment/paste; July5–31 result4320; unknown field visibly blocked. No JavaScript errors. Development script `scripts/verify_worksheet_browser.py` separately reproduces and verifies delayed save/calculation race handling.
+- Human-assisted repeat of two old samples: gross4960 and2774 match prior independent audit. These tests start with human-entered source facts. They do not establish OCR accuracy, governing entitlement/HDA authority, absence of other payments or final cash approval.
+- Blank formula/salary workbooks contain no employee data. All source cases, reports and screenshots remain outside Git in `/workspace/review/excel-arrear-maker-2026-10-28`.
+- No new runtime packages/models and no release package produced. Installed Windows footprint has not been remeasured; final bundling remains paused for user acceptance.
