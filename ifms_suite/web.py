@@ -710,3 +710,7 @@ register_document_records(suite)
 from .ledger_routes import register_ledger
 
 register_ledger(suite)
+
+from .worksheet_routes import register_worksheets
+
+register_worksheets(suite)
