@@ -74,7 +74,20 @@ def apply_bill_reviews(facts, reviews):
         if not values["allowances"]:
             raise ValueError("Source allowance heads required")
         gross = sum((money(v) for v in values["allowances"].values()), money("0"))
-        deducted = sum((money(v) for v in values["deductions"].values()), money("0"))
+        effects = {
+            str(k).strip().upper(): v
+            for k, v in record.get(
+                "deduction_effects", old.get("deduction_effects", {})
+            ).items()
+        }
+        if any(type(v) is not bool for v in effects.values()) or set(effects) - set(
+            values["deductions"]
+        ):
+            raise ValueError("Verify source deduction effects on net pay")
+        deducted = sum(
+            (money(v) for k, v in values["deductions"].items() if effects.get(k, True)),
+            money("0"),
+        )
         for key, total in [
             ("printed_gross", gross),
             ("printed_deductions", deducted),
@@ -97,6 +110,7 @@ def apply_bill_reviews(facts, reviews):
             updated[key] = record[key]
         updated.update(
             values,
+            deduction_effects=effects,
             complete=True,
             allowances_complete=True,
             deductions_complete=True,

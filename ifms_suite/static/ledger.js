@@ -19,12 +19,12 @@ async function loadLedgerSources() {
 }
 
 function ledgerPayment(payment) {
-  const values = heads => Object.entries(heads || {}).map(([head, amount]) =>
-    `<span>${escapeHTML(head)}: ${escapeHTML(amount)}</span>`).join(' · ');
+  const values = (heads, effects = {}) => Object.entries(heads || {}).map(([head, amount]) =>
+    `<span>${escapeHTML(head)}: ${escapeHTML(amount)}${(effects[head] ?? effects[head.toUpperCase()]) === false ? ' (non-accounting; excluded from net)' : ''}</span>`).join(' · ');
   const source = payment.ledger_source;
   return `<details><summary>${escapeHTML(payment.bill_no)} · ${escapeHTML(payment.bill_type)} · ${escapeHTML(payment.ledger_status || 'reviewed')}</summary>
     <p>Allowances: ${values(payment.allowances) || 'Unresolved'}</p>
-    <p>Deductions: ${values(payment.deductions) || 'Unresolved'}</p>
+    <p>Deductions: ${values(payment.deductions, payment.deduction_effects) || 'Unresolved'}</p>
     <p>Printed gross ${escapeHTML(payment.printed_gross ?? 'unresolved')} · deductions ${escapeHTML(payment.printed_deductions ?? 'unresolved')} · net ${escapeHTML(payment.printed_net ?? 'unresolved')}</p>
     ${payment.ledger_issue ? `<p class="warning">${escapeHTML(payment.ledger_issue)}</p>` : ''}
     ${source ? `<a target="_blank" rel="noopener" href="/suite/api/imports/${Number(source.source_import)}/source">View original PDF</a>` : ''}

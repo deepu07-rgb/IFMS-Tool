@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from statistics import median
 
-FACTS_VERSION = "geometry-printed-v6"
+FACTS_VERSION = "geometry-printed-v7"
 
 # Fixed recognition gates are independent of reconciliation and expected totals.
 NEURAL_CONFIDENCE = 0.85
@@ -86,6 +86,8 @@ def _identity(words):
 
 def _classify_page(words):
     trusted = "".join(_text(w) for w in words if _reliable(w))
+    if "PAYSLIP" in trusted and "EARNINGS" in trusted:
+        return "salary_slip"
     if "GA55" in trusted or ("ALLOWANCES" in trusted and "GROSS" in trusted):
         return "ga55"
     if (
@@ -317,6 +319,7 @@ def _printed_total(words, gross, geometry, name, page):
 def facts_from_pages(pages):
     """Build facts from word boxes, keeping document and employee boundaries."""
     bills = []
+    salary_bills = []
     orders = []
     issues = []
     layout = None
@@ -330,6 +333,26 @@ def facts_from_pages(pages):
         compact = " ".join(_text(w) for w in words)
         classification = _classify_page(words)
         classifications.append(dict(page=number, kind=classification))
+        if classification == "salary_slip":
+            from .salary_slip import salary_slip_fact
+
+            bill, flags = salary_slip_fact(words, number)
+            salary_bills.append(bill)
+            if flags:
+                issues.append(
+                    dict(
+                        kind="bill_unresolved",
+                        blocking=True,
+                        scope="bill",
+                        bill_no=bill["bill_no"],
+                        source_pages=[number],
+                        employee_code=bill["employee_code"],
+                        pay_month=bill["pay_month"],
+                        issues=flags,
+                    )
+                )
+            previous = None
+            continue
         if classification == "unclassified":
             issues.append(
                 dict(
@@ -342,8 +365,12 @@ def facts_from_pages(pages):
                     evidence=[_evidence(w, number) for w in words],
                 )
             )
+        header_end = max(
+            (w["box"][1] for w in words if _text(w).strip("-—–_=.") == "ALLOWANCES"),
+            default=0.23,
+        )
         header_identities = [
-            w for w in words if w["box"][1] < 0.23 and ID.fullmatch(_text(w))
+            w for w in words if w["box"][1] < header_end and ID.fullmatch(_text(w))
         ]
         employee = _identity(header_identities)
         profile_header = any(
@@ -442,6 +469,47 @@ def facts_from_pages(pages):
                         "scope": "document",
                     }
                 )
+                # Preserve visible source rows when column labels cannot be read.
+                # These are review candidates only: no totals or money are assigned.
+                row_numbers = [
+                    w
+                    for w in words
+                    if re.fullmatch(r"\d{9}", w["text"])
+                    and 0.12 < w["box"][0] < 0.30
+                    and w["box"][1] > header_end
+                ]
+                for candidate in row_numbers:
+                    raw = [
+                        _evidence(w, number)
+                        for w in words
+                        if abs(_y(w) - _y(candidate)) < 0.02
+                    ]
+                    salary_bills.append(
+                        dict(
+                            employee_code=employee,
+                            pay_month="",
+                            bill_no=candidate["text"],
+                            bill_type="",
+                            bill_type_reliable=False,
+                            identity_reliable=False,
+                            period_reliable=False,
+                            allowances={},
+                            deductions={},
+                            printed_gross=None,
+                            printed_deductions=None,
+                            printed_net=None,
+                            complete=False,
+                            allowances_complete=False,
+                            deductions_complete=False,
+                            deductions_reconciled=None,
+                            net_reconciled=None,
+                            evidence=raw,
+                            raw_fields=raw,
+                            source_pages=[number],
+                            source_subtype="ga55",
+                            issues=["Allowance column geometry unresolved"],
+                        )
+                    )
                 previous = None
                 continue
             left, right, gx1, gx2 = layout
@@ -888,7 +956,7 @@ def facts_from_pages(pages):
     from .pay_orders import extract_pay_orders, extract_order_candidates
 
     return dict(
-        bills=bills,
+        bills=bills + salary_bills,
         orders=orders,
         issues=issues,
         page_classifications=classifications,
@@ -1173,7 +1241,74 @@ def _recognize_page(page, recognizer, runtime):
                     recognizer="rapidocr",
                 )
             )
+    # A printed GA55 embedded low on a scanned sheet needs source resolution
+    # appropriate to its own block. The title and observed text bound the crop;
+    # no amounts, totals or reconciliation results select the recognition area.
+    titles = [
+        w for w in words if _text(w) == "GA55A" and _reliable(w) and w["box"][1] > 0.23
+    ]
+    source_block = None
+    outside_words = []
+    initial_block_words = []
+    if len(titles) == 1:
+        top = max(0, titles[0]["box"][1] - 0.025)
+        bottom = min(1, max(w["box"][3] for w in words if w["box"][1] >= top) + 0.025)
+        if bottom - top < 0.65:
+            import pymupdf
+
+            source_block = [0, top, 1, bottom]
+            outside_words = [
+                w for w in words if w["box"][3] < top or w["box"][1] > bottom
+            ]
+            initial_block_words = [w for w in words if w not in outside_words]
+            clip = pymupdf.Rect(
+                0, top * page.rect.height, page.rect.width, bottom * page.rect.height
+            )
+            pix = page.get_pixmap(dpi=350, clip=clip)
+            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            raw, _ = recognizer(pix.tobytes("png"))
+            words = [
+                dict(
+                    text=text,
+                    confidence=float(confidence),
+                    box=[
+                        min(v[0] for v in polygon) / pix.width,
+                        top + min(v[1] for v in polygon) / pix.height * (bottom - top),
+                        max(v[0] for v in polygon) / pix.width,
+                        top + max(v[1] for v in polygon) / pix.height * (bottom - top),
+                    ],
+                    recognizer="rapidocr",
+                    source_block_box=source_block,
+                    source_block_dpi=350,
+                )
+                for polygon, text, confidence in raw or []
+            ]
+            for original in initial_block_words:
+                kind = _critical_kind(original)
+                if not kind:
+                    continue
+                overlapping = [
+                    w
+                    for w in words
+                    if _overlaps(original, w) and _critical_kind(w) == kind
+                ]
+                if overlapping:
+                    # Enlargement is another reading of the same source, not
+                    # authority to discard a reliable conflicting original.
+                    for enlarged in overlapping:
+                        _merge_candidates(enlarged, [original], kind)
+                else:
+                    words.append(original)
     secondary = _tesseract_words(image, *runtime[:2]) if runtime else []
+    if source_block:
+        for word in secondary:
+            word["box"][1] = source_block[1] + word["box"][1] * (
+                source_block[3] - source_block[1]
+            )
+            word["box"][3] = source_block[1] + word["box"][3] * (
+                source_block[3] - source_block[1]
+            )
+            word.update(source_block_box=source_block, source_block_dpi=350)
     if not words:
         words = secondary
     compact = " ".join(_text(w) for w in words)
@@ -1210,14 +1345,14 @@ def _recognize_page(page, recognizer, runtime):
                 _merge_candidates(primary, [candidate], kind)
             elif kind in ("head", "month", "identity"):
                 words.append(candidate)
-    images = {200: image}
+    images = {} if source_block else {200: image}
     for word in words:
         kind = _critical_kind(word, is_order, rate_x)
         if kind and (_candidate_value(word, kind) is None or not _reliable(word)):
             _resolve_crop_candidates(
                 word, _crop_candidates(page, word, recognizer, runtime, images), kind
             )
-    return words
+    return outside_words + words
 
 
 def extract_document_facts(pdf_bytes):

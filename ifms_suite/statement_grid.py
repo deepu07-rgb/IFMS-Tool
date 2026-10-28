@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import re
 
-GRID_EXTRACTION_VERSION = "3"
+GRID_EXTRACTION_VERSION = "4"
 
 
 def literal_money(text):
@@ -103,6 +103,140 @@ def _positions(mask, horizontal):
     return [int(round(sum(group) / len(group))) for group in groups]
 
 
+def _supported_grid_lines(binary):
+    """Require continuous source ink rather than collinear text glyphs."""
+    import numpy as np
+
+    horizontal, vertical = _lines(binary, True), _lines(binary, False)
+    # Long text baselines can trigger Hough. Require continuous source ink
+    # along the proposed rule, not merely a collinear run of glyphs.
+    h, w = binary.shape
+
+    def supported(line, is_horizontal):
+        slope, intercept = line
+        axis = np.arange(
+            int((w if is_horizontal else h) * 0.1),
+            int((w if is_horizontal else h) * 0.9),
+        )
+        other = np.rint(slope * axis + intercept).astype(int)
+        if np.any(other < 3) or np.any(other >= (h if is_horizontal else w) - 3):
+            return False
+        samples = np.array(
+            [
+                binary[other + d, axis] if is_horizontal else binary[axis, other + d]
+                for d in range(-2, 3)
+            ]
+        )
+        return float(np.mean(np.any(samples, axis=0))) >= 0.45
+
+    horizontal = [line for line in horizontal if supported(line, True)]
+    vertical = [line for line in vertical if supported(line, False)]
+    return horizontal, vertical
+
+
+def _continues_beyond_table(binary, vertical, horizontal):
+    """A page crease crossing both table ends cannot establish a column."""
+    import numpy as np
+
+    h, w = binary.shape
+    slope, intercept = vertical
+    first = _intersection(horizontal[0], vertical)[1]
+    last = _intersection(horizontal[-1], vertical)[1]
+    extension = max(30, int(last - first))
+    for start, stop in (
+        (int(first) - extension, int(first) - 8),
+        (int(last) + 8, int(last) + extension),
+    ):
+        ys = np.arange(max(3, start), min(h - 3, stop))
+        xs = np.rint(slope * ys + intercept).astype(int)
+        valid = (xs >= 3) & (xs < w - 3)
+        ys, xs = ys[valid], xs[valid]
+        if len(ys) < 30:
+            return False
+        support = np.any([binary[ys, xs + d] for d in range(-2, 3)], axis=0)
+        if float(np.mean(support)) < 0.6:
+            return False
+    return True
+
+
+def _localized_grid_lines(binary):
+    """Find short ruled networks locally; return lines in source coordinates.
+
+    Only connected printed rules can establish a region. Local continuity and
+    observed intersections must support both axes before any cells are formed.
+    """
+    import cv2
+    import numpy as np
+
+    h, w = binary.shape
+    horizontal = cv2.morphologyEx(
+        binary,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (max(25, w // 40), 1)),
+    )
+    vertical = cv2.morphologyEx(
+        binary,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(25, h // 30))),
+    )
+    network = cv2.bitwise_or(horizontal, vertical)
+    count, _, stats, _ = cv2.connectedComponentsWithStats(network, 8)
+    candidates = []
+    for x, y, width, height, _ in stats[1:count]:
+        if width < w * 0.28 or height < 50:
+            continue
+        left, top = max(0, x - 8), max(0, y - 8)
+        right, bottom = min(w, x + width + 8), min(h, y + height + 8)
+        local = binary[top:bottom, left:right]
+        hs, _ = _supported_grid_lines(local)
+        if len(hs) < 3:
+            continue
+        # A crease/signature can connect a short table to distant page ink.
+        # Bound the local test by the observed horizontal rules themselves.
+        upper = min(hs[0][1], hs[0][0] * (right - left) + hs[0][1])
+        lower = max(hs[-1][1], hs[-1][0] * (right - left) + hs[-1][1])
+        bottom = min(h, top + int(np.ceil(lower)) + 8)
+        top = max(0, top + int(np.floor(upper)) - 8)
+        local = binary[top:bottom, left:right]
+        hs, vs = _supported_grid_lines(local)
+        if len(hs) < 3 or len(vs) < 3:
+            continue
+        # A crossing needs source ink from each directional rule mask, not
+        # merely the intersection of extrapolated lines across blank paper.
+        crossings = np.zeros((len(hs), len(vs)), dtype=bool)
+        for row, hl in enumerate(hs):
+            for column, vl in enumerate(vs):
+                px, py = _intersection(hl, vl)
+                px, py = int(round(px)) + left, int(round(py)) + top
+                # Hough represents slightly bowed/scanned rules by a straight
+                # line; inspect the nearby measured directional ink as well.
+                radius = 10
+                if radius <= px < w - radius and radius <= py < h - radius:
+                    crossings[row, column] = bool(
+                        np.any(
+                            horizontal[py - radius : py + radius + 1, px - 3 : px + 4]
+                        )
+                        and np.any(
+                            vertical[py - 3 : py + 4, px - radius : px + radius + 1]
+                        )
+                    )
+        supported_h = np.count_nonzero(crossings, axis=1) >= 3
+        supported_v = np.count_nonzero(crossings, axis=0) >= 3
+        if np.count_nonzero(supported_h) < 3 or np.count_nonzero(supported_v) < 3:
+            continue
+        hs = [(s, b + top - s * left) for (s, b), keep in zip(hs, supported_h) if keep]
+        vs = [(s, b + left - s * top) for (s, b), keep in zip(vs, supported_v) if keep]
+        vs = [line for line in vs if not _continues_beyond_table(binary, line, hs)]
+        if len(vs) >= 3:
+            candidates.append(
+                (int(np.count_nonzero(crossings)), width * height, hs, vs)
+            )
+    if not candidates:
+        return [], []
+    _, _, hs, vs = max(candidates, key=lambda candidate: candidate[:2])
+    return hs, vs
+
+
 def extract_statement_grid(
     image,
     recognizer=None,
@@ -157,30 +291,11 @@ def extract_statement_grid(
     # the first handwriting baseline before recognition ever sees it. Geometry
     # uses the same sensitive threshold here as the normalized rule detection.
     binary = _binary(rgb, offset=2)
-    horizontal, vertical = _lines(binary, True), _lines(binary, False)
-    # Long text baselines can trigger Hough. Require continuous source ink
-    # along the proposed rule, not merely a collinear run of glyphs.
+    horizontal, vertical = _supported_grid_lines(binary)
     h, w = binary.shape
-
-    def supported(line, is_horizontal):
-        slope, intercept = line
-        axis = np.arange(
-            int((w if is_horizontal else h) * 0.1),
-            int((w if is_horizontal else h) * 0.9),
-        )
-        other = np.rint(slope * axis + intercept).astype(int)
-        if np.any(other < 3) or np.any(other >= (h if is_horizontal else w) - 3):
-            return False
-        samples = np.array(
-            [
-                binary[other + d, axis] if is_horizontal else binary[axis, other + d]
-                for d in range(-2, 3)
-            ]
-        )
-        return float(np.mean(np.any(samples, axis=0))) >= 0.45
-
-    horizontal = [line for line in horizontal if supported(line, True)]
-    vertical = [line for line in vertical if supported(line, False)]
+    localized = len(horizontal) < 3 or len(vertical) < 3
+    if localized:
+        horizontal, vertical = _localized_grid_lines(binary)
     if len(horizontal) < 3 or len(vertical) < 3:
         result["issues"].append("Insufficient ruled-table grid evidence")
         return result
@@ -272,6 +387,24 @@ def extract_statement_grid(
     xs, ys = _positions(vmask[:, :width], False), _positions(
         cv2.dilate(hmask[:, :width], np.ones((7, 1), np.uint8)), True
     )
+    if localized:
+        # Detect page-spanning strokes in source space: a perspective-normalized
+        # column may approximate a bowed crease with a different slope.
+        creases = [
+            line
+            for line in _lines(binary, False)
+            if _continues_beyond_table(binary, line, horizontal)
+        ]
+        measured_xs = []
+        for x in xs:
+            midpoint = cv2.perspectiveTransform(
+                np.float32([[[x, (height - 1) / 2]]]), inverse
+            )[0, 0]
+            if not any(
+                abs(midpoint[0] - (s * midpoint[1] + b)) <= 6 for s, b in creases
+            ):
+                measured_xs.append(x)
+        xs = measured_xs
     # Warping can clip the outer rules by a pixel; their measured corners remain evidence.
     xs = sorted(set([0, *[x for x in xs if 5 < x < width - 6], width - 1]))
     ys = sorted(set([0, *[y for y in ys if 5 < y < height - 6], height - 1]))

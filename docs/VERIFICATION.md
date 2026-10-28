@@ -176,3 +176,38 @@ not certified letter-for-letter, and the Latin PDF font does not support Hindi
 names; Excel preserves Unicode. No new runtime dependency, model, cloud OCR,
 Windows package, installed-size certification, deployment or final bundling was
 performed. The user's further sample/manual acceptance gates remain in force.
+
+## Two new original-source tests — 28 October 2026
+
+Final code regression: **531 passed, 14 skipped**, zero failures, 71.50 seconds. Before
+finalization, focused failing-then-passing regressions reproduced short-table and
+crossing-crease detection, salary-slip parsing, source-crop reading conflicts,
+non-accounting deduction effects, and printed-total comparison gaps. Both suite
+and ledger JavaScript syntax checks and git diff checks passed. Independent
+read-only review confirmed original/crop disagreements now remain visible and
+reported no remaining important bounded-fix findings.
+
+Actual original PDFs were processed through HTTP import, shared source OCR,
+statement-grid OCR and source-case preparation in a fresh local workspace. Initial
+results had zero usable salary bills for either source and no detected printed
+reference table. After repairs, one July salary slip is complete with 12/12 checked
+monetary fields matching independent source truth; August remains blocked for an
+identity disagreement. The small degraded GA55 yields only unresolved raw source
+candidates. A detected table or arithmetic equality is not counted as OCR success.
+
+Scoped due/drawn benchmarks: handwritten raw 5/28 exact (17.86%), accepted 0/28;
+printed raw 33/48 exact (68.75%), accepted 28/48. Printed wrapped totals lose a digit
+and are incorrect despite high OCR confidence. Missing readings stay in the
+denominator; human corrections, headings and blank grid cells do not inflate
+accuracy. Original-source replay confirmed raw grid cells match benchmarked cells.
+A separate reference diagnostic transcribed one month and mapped checked headings
+but made zero monetary corrections; it exposed incomplete fields. Engine-only
+reviewed entitlement verification, with original source blockers retained, computed
+the expected HRA gross and flagged the printed-total OCR mismatch against verified
+selected heads. This is not automatic complete-bill acceptance.
+
+Both final unassisted bill-route attempts remain blocked with no payable export.
+Actual browser source/grid checks showed the incorrect readings beside their
+original crops, with no JavaScript errors. Payroll documents, screenshots,
+per-field truth and reports remain private outside Git. Final bundling is paused;
+no installed-size or production-readiness claim is made.

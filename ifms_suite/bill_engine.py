@@ -82,10 +82,18 @@ def _reconcile(bill):
     if sum(heads.values(), ZERO) != gross:
         raise ValueError("Drawn components do not reconcile with printed gross")
     deductions = _amounts(bill.get("deductions", {}))
+    effects = {_head(k): v for k, v in bill.get("deduction_effects", {}).items()}
+    if any(type(v) is not bool for v in effects.values()) or set(effects) - set(
+        deductions
+    ):
+        raise ValueError("Verify source deduction effects on net pay")
     deducted = money(bill["printed_deductions"])
     if any(v < 0 for v in deductions.values()) or deducted < 0:
         raise ValueError("Source deductions must be nonnegative")
-    if sum(deductions.values(), ZERO) != deducted:
+    if (
+        sum((v for k, v in deductions.items() if effects.get(k, True)), ZERO)
+        != deducted
+    ):
         raise ValueError(
             "Source deduction heads do not reconcile with printed deductions"
         )

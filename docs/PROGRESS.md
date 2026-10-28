@@ -167,3 +167,38 @@ form output, editable cell and margin save/reload with unchanged raw OCR. Anothe
 original case still blocks net payment for genuinely unresolved prior-credit
 coverage. Test-only confirmations and all personal screenshots remain private.
 This is an implementation checkpoint, not production or bundling acceptance.
+
+## New handwritten and printed-source acceptance checks — 28 October 2026
+
+Tested two further original four-page source PDFs in a new local workspace,
+freezing unassisted results before repairs and independently transcribing source
+truth before reading machine outputs. Neither source meets the 80% due/drawn
+financial-field target or unattended complete-bill acceptance. Handwritten raw
+readings were exact for 5/28 monetary cells; printed scanned-table readings for
+33/48. These are scoped numeric checks, not whole-document accuracy. The earlier
+27/32 development result did not generalize to these samples.
+
+Fixed a concrete short embedded-table geometry failure using observed local rule
+networks and source-supported crease rejection (grid version 4). Added a distinct
+monthly salary-slip adapter with explicit IFMS allowance codes, printed totals,
+identity-conflict retention and accounting versus non-accounting deduction flags
+(facts version 7). Compact unreadable GA55 rows remain blocked raw candidates,
+with no amounts invented. Preserved reliable original OCR candidates when an
+independent enlarged reading conflicts. Corrected source reconciliation/review
+and ledger display for explicitly informational deductions.
+
+Reference comparison now also validates printed selected-head totals independently
+of matching component cells, including verified prior settlements in already-drawn
+values. A real wrapped numeric total was truncated by OCR and is now exposed by
+this comparison rather than repaired from the expected answer. Main source bill
+routes remain blocked for unresolved source evidence; an engine-only reviewed
+entitlement check is explicitly separate from automatic acceptance.
+
+One new July salary slip had all 12 checked monetary values correct; its other month
+retains an employee-identity disagreement. This does not establish broad salary
+OCR acceptance. Independent source arithmetic supports both HRA differences, while
+an unclear handwritten component and a printed deduction-column inconsistency
+require separate review. Actual source PDFs, field benchmarks and screenshots
+stay private outside Git. Final frozen regression: 531 passed, 14 skipped; JavaScript
+syntax/diff checks passed, and independent code review found no remaining important
+issue. No runtime libraries, OCR models, cloud processing or final bundle added.

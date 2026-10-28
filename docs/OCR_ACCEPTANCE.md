@@ -103,3 +103,15 @@ source/grid/revision binding and audit. They never enter mapped comparison rows
 or establish entitlement. Raw regions keep null text/amount and unresolved
 column identity, even after an annotation is saved. Ordinary cell edits save
 only changed entries; selecting a raw candidate alone does not approve it.
+
+## New-sample check after the development diagnostic
+
+Two further scanned statement pages did not meet the target. Exact raw monetary
+readings were 5/28 on the handwritten table and 33/48 on the printed table. The printed
+source has explicit zeros and two wrapped totals; missing or truncated readings
+count as errors, without letter/digit substitution or concatenation to the expected
+amount. Accepted cell values were 0/28 and 28/48 respectively. Source identity/date
+accuracy and the separate salary-slip extraction are reported independently.
+These failures show why the earlier known-page 84.375% result is not an acceptance
+claim for new documents. Local grid/extraction repairs do not replace the need for
+better handwriting recognition and field-level review.
