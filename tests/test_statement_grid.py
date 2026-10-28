@@ -50,6 +50,44 @@ class LiteralMoneyTests(unittest.TestCase):
 
 
 class StatementGridTests(unittest.TestCase):
+    def test_clipped_right_border_preserves_unassigned_source_candidates(self):
+        image = np.full((340, 480, 3), 255, np.uint8)
+        for x in (40, 160, 280):
+            cv2.line(image, (x, 40), (x, 290), (50, 50, 50), 2)
+        for y in (40, 120, 200, 290):
+            cv2.line(image, (40, y), (479, y), (50, 50, 50), 2)
+        cv2.putText(
+            image, "7319", (320, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2
+        )
+        result = extract_statement_grid(image, lambda *a, **k: ([["7319", 0.99]], None))
+        self.assertEqual(len(result["cells"]), 6)
+        self.assertTrue(result.get("source_margin_regions"))
+        margin = result["source_margin_regions"][0]
+        self.assertEqual(margin["candidates"][0]["text"], "7319")
+        self.assertIsNone(margin["column"])
+        self.assertIsNone(margin["text"])
+        self.assertIsNone(margin["amount"])
+        self.assertEqual(margin["status"], "source_geometry_unresolved")
+        self.assertTrue(margin["review_required"])
+        self.assertLessEqual(max(p[0] for p in margin["source_polygon"]), 479)
+        self.assertNotIn("7319", [v for row in result["table_rows"] for v in row])
+        self.assertEqual(result["semantic_rows"], [])
+
+    def test_faded_rules_keep_first_content_inside_source_grid(self):
+        image = np.full((340, 480, 3), 255, np.uint8)
+        for x in (40, 160, 280, 420):
+            cv2.line(image, (x, 40), (x, 290), (240, 240, 240), 1)
+        for y in (40, 120, 200, 290):
+            cv2.line(image, (40, y), (420, y), (240, 240, 240), 1)
+        cv2.putText(
+            image, "1234", (65, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 2
+        )
+        result = extract_statement_grid(image)
+        self.assertEqual(len(result["cells"]), 9)
+        self.assertLess(abs(result["source_grid_polygon"][0][1] - 40), 3)
+        self.assertEqual(result["cells"][0]["row"], 0)
+        self.assertIsNone(result["cells"][0]["amount"])
+
     def test_real_rules_define_cells_and_provenance(self):
         calls = []
 
@@ -64,6 +102,7 @@ class StatementGridTests(unittest.TestCase):
         self.assertEqual(len(result["row_rules"]), 4)
         self.assertEqual(len(result["cells"]), 9)
         self.assertTrue(result["review_required"])
+        self.assertEqual(result["source_margin_regions"], [])
         self.assertEqual(result["cells"][0]["amount"], "1234")
         self.assertEqual(result["cells"][0]["source_sha256"], "abc")
         self.assertEqual(result["cells"][0]["source_page"], 4)

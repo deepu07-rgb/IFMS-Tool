@@ -140,3 +140,39 @@ Original Outer Sheet extraction and every exported component matched, including 
 Actual Chromium walkthrough captured18 real screenshots with no page errors. Embedded Inner->Schedules navigation initially failed on same-document hash changes; observed browser failure, fixed the hash-change handler and verified the full navigation. Sidebar titles/highlights and loaded/prepared status messages were corrected. Screenshot PDF and ZIP verified structurally (19PDF pages including18images, ZIP integrity passes). They and all source/employee evidence are private outside Git.
 
 Final full suite on current sources: **442 passed,14 skipped** (59.77 seconds). JavaScript syntax and diff checks passed. No final software bundle was built. These checks establish the stated source/export/filter behaviours, not universal OCR accuracy or unattended payroll readiness.
+
+## Ledger and editable OCR continuation — 28 October 2026
+
+Frozen-source complete regression: **513 passed, 14 skipped**, zero failures,
+59.12 seconds (`python -m pytest -q`, development environment). Both suite and
+ledger JavaScript syntax checks and `git diff --check` passed. Independent review
+of ledger/source conflicts, stale comparisons, source-margin correction isolation
+and supplied-form prior-credit accounting reported no remaining important issues.
+
+Tests cover actual reviewed storage reuse in a separate sanction import,
+source-byte/version/review binding, classification/amount/coverage conflicts,
+atomic bulk admission, optimistic correction updates, immutable raw OCR, missing
+fields, source-only margin annotation isolation, supplied form columns/partial
+dates, aggregate GPF adjustment and prior-credit conservation. Original-source
+browser checks saved and reloaded a verified month, reused it for a matching HRA
+draft, downloaded the supplied PDF/Excel, saved exactly one source cell correction,
+and separately saved an unassigned margin annotation without changing financial
+or raw machine rows. Browser checks reported no JavaScript errors. A genuine
+unknown prior-payment covered period still blocks the other sample's net.
+
+A browser-discovered hidden nested margin section was fixed and replayed
+successfully. One intermediate full test process overlapped active renderer edits
+and had three mixed-version failures; the final frozen run above supersedes that
+non-frozen process. No failing checks are being treated as successful validation.
+
+The original-source numeric diagnostic is **27/32 exact raw suggestions** on one
+known handwritten page, including two unassigned margin readings. It has **zero
+unambiguous automatic accepted fields** for this slice because blue and red ink
+share physical cells. It does not establish whole-document, holdout, employee
+identity/date accuracy or unattended financial accuracy. See OCR_ACCEPTANCE.md.
+
+Bill exports use the supplied grid variants. The faint newer header wording is
+not certified letter-for-letter, and the Latin PDF font does not support Hindi
+names; Excel preserves Unicode. No new runtime dependency, model, cloud OCR,
+Windows package, installed-size certification, deployment or final bundling was
+performed. The user's further sample/manual acceptance gates remain in force.

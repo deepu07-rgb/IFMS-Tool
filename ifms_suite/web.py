@@ -696,10 +696,17 @@ from .evidence_routes import register_evidence_routes
 register_evidence_routes(suite)
 
 from .bill_routes import register_bill_routes
+
 register_bill_routes(suite)
 
 from .statement_grid_routes import register_statement_grid_routes
+
 register_statement_grid_routes(suite)
 
 from .document_records import register_document_records
+
 register_document_records(suite)
+
+from .ledger_routes import register_ledger
+
+register_ledger(suite)

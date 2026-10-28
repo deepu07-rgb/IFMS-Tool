@@ -135,3 +135,35 @@ The new reference-grid tool segments ruled cells and preserves OCR candidates/so
 ## Module validation and screenshots — 28 October 2026
 
 User requested two old samples plus all-module screenshots and Inner/Outer/GA55 filter/export validation. Live original-source tests, observed failures and fixes are recorded in VERIFICATION.md. Added filtered Inner PDF and common Outer/GA55 record filters with matching PDF/Excel reports. Repaired shared-line Salary+SIP/GPF classification from source geometry and embedded tab navigation; retained source warnings and unapproved states. Actual module screenshots and private downloadable walkthrough are outside Git. Final regression442passed14skipped. Both arrear samples require human source confirmations; one remains blocked for genuinely missing prior-credit dates. No new automatic OCR or production-readiness claim. Bundling remains paused.
+
+## Reusable ledger and editable source OCR — 28 October 2026
+
+Implemented the user's approved ledger direction with a Salary Ledger sidebar
+module over existing reviewed payment storage. Verified original months persist
+across imports and reloads; a separate sanction case can reuse them without pay
+re-entry. Conflicts in salary identity/classification, amounts, printed totals,
+coverage and prior allocations block reuse. Hash/version/review snapshots protect
+source-backed records, and failed multi-record admission rolls back atomically.
+
+Reference OCR now exposes raw suggestions, blank cells, the original page and
+focused cell crops. Operators can select a raw reading or edit it, then save only
+changed entries in a separate audited overlay. Changed source/grid versions and
+corrections invalidate stale comparison rows. Clipped-edge content remains an
+unassigned annotation, never a financial column. Source-only numeric development
+check improved to 27/32 exact raw readings; see OCR_ACCEPTANCE.md for its limited
+scope and zero automatic accepted fields. Whole-document 80% remains unproven.
+
+Complete bill downloads now use the two supplied Jodhpur grid variants; unsupported
+changed heads and unresolved bills block output instead of falling back to generic
+layouts. Verified allocated prior credits appear in the existing already-drawn
+columns, with explicit disclosure and source references; monthly salary deductions
+are not deducted again. Partial dates remain visible inside the month column. Existing component exports are marked
+calculation working papers in the UI. Faint source wording and Hindi PDF font
+limits are documented in SUPPLIED_FORMAT_REQUIREMENTS.md. Saved bill exports
+recheck current original, source/ledger and rate dependencies.
+
+Actual original-source browser checks passed ledger save/reload and matching HRA
+form output, editable cell and margin save/reload with unchanged raw OCR. Another
+original case still blocks net payment for genuinely unresolved prior-credit
+coverage. Test-only confirmations and all personal screenshots remain private.
+This is an implementation checkpoint, not production or bundling acceptance.

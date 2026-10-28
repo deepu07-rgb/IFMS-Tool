@@ -348,8 +348,38 @@
         </div>
         <div id="paymentReview"></div>
       </section>
+      <section id="salary_ledger">
+        <h1>Salary ledger & arrear maker</h1>
+        <p>Confirm monthly drawn pay once, then reuse it for subsequent claims. Regular salary and previous arrear payments stay separate.</p>
+        <div class="card">
+          <form id="ledgerEmployeeForm">
+            <label>Employee code<input name="employee_code" required list="ledgerEmployees"></label>
+            <datalist id="ledgerEmployees"></datalist>
+            <button class="action">Open employee ledger</button>
+          </form>
+          <div id="ledgerRecords" aria-live="polite"></div>
+        </div>
+        <div class="card">
+          <h2>Add verified drawn pay from a source</h2>
+          <p>Check the original and select its reconciled payment records. Missing figures need source review first; this confirmation does not change raw OCR.</p>
+          <form id="ledgerSourceForm"><label>Source PDF<select name="import_id" required></select></label><button class="action">Load source records</button></form>
+          <div id="ledgerSourceRecords" aria-live="polite"></div>
+        </div>
+        <div class="card">
+          <h2>Prepare using the saved ledger</h2>
+          <p>Open the source sanction once. Its saved order decision and this employee’s ledger are reused when you select claim dates. Conflicting or stale records must be resolved before approval.</p>
+          <form id="ledgerCaseForm"><label>Sanction / source case<select name="import_id" required></select></label><button class="action">Open arrear case</button></form>
+        </div>
+      </section>
       <section id="arrears">
         <h1>Arrear & Due–Drawn Maker</h1>
+        <div class="card">
+          <h2>Prepare from the employee ledger</h2>
+          <p>Reuse verified monthly salary, open the saved sanction case and select the claim dates. Complete bill downloads use the supplied due–drawn grids.</p>
+          <button type="button" class="action" onclick="openModule('salary_ledger')">Open Salary Ledger</button>
+        </div>
+        <h2>Advanced component calculations</h2>
+        <p>These controls prepare calculation working papers. Use the complete source case above for the supplied office bill form.</p>
         <div class="grid">
           <div>
             <div class="card">
@@ -775,5 +805,6 @@
       </section>
     </main>
     <script src="{{ url_for('suite.static',filename='suite.js') }}"></script>
+    <script src="{{ url_for('suite.static',filename='ledger.js') }}"></script>
   </body>
 </html>

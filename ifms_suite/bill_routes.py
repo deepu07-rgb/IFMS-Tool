@@ -82,12 +82,12 @@ def _rates(db):
 
 
 def _history_facts(db, facts, code):
-    from .payroll import payment_records
+    from .ledger import ledger_payments
     from .calculation import money
-    from .payment_types import payment_class
+    from .payment_types import payment_class, entitlement_type
 
     result = deepcopy(facts)
-    for payment in payment_records(db, code):
+    for payment in ledger_payments(db, code):
         matches = [
             b
             for b in result.get("bills", [])
@@ -100,8 +100,39 @@ def _history_facts(db, facts, code):
             normalize = lambda values: {
                 str(k).upper(): money(v) for k, v in values.items()
             }
-            if normalize(b.get("allowances", {})) != normalize(
-                payment.get("allowances", {})
+            if (
+                (
+                    payment_class(b) != payment_class(payment)
+                    or entitlement_type(b) != entitlement_type(payment)
+                )
+                or any(
+                    b.get(field) not in (None, "")
+                    and payment.get(field) not in (None, "")
+                    and money(b[field]) != money(payment[field])
+                    for field in ("printed_gross", "printed_deductions", "printed_net")
+                )
+                or any(
+                    normalize(b.get(field, {})) != normalize(payment.get(field, {}))
+                    for field in ("allowances", "deductions")
+                )
+                or any(
+                    field in b
+                    and field in payment
+                    and b[field] is not None
+                    and payment[field] is not None
+                    and b[field] != payment[field]
+                    for field in (
+                        "deduction_effects",
+                        "covered_dates",
+                        "entitlement_period",
+                        "allocations_by_head",
+                    )
+                )
+                or (
+                    b.get("monthly_basic") not in (None, "")
+                    and payment.get("monthly_basic") not in (None, "")
+                    and money(b["monthly_basic"]) != money(payment["monthly_basic"])
+                )
             ):
                 result.setdefault("issues", []).append(
                     dict(
@@ -121,13 +152,14 @@ def _history_facts(db, facts, code):
                 ):
                     if payment.get(field):
                         b[field] = payment[field]
-        elif payment_class(payment) != "regular_salary":
-            # Preserve all known paid credits, including unresolved coverage.
+        else:
+            # Preserve reviewed drawn salaries and all known prior credits.
             result.setdefault("bills", []).append(
                 dict(
                     payment,
                     complete=payment.get("reviewed") is True,
-                    evidence=[
+                    evidence=deepcopy(payment.get("evidence", []))
+                    + [
                         dict(
                             reference=payment.get(
                                 "reference", "Saved reviewed history"
@@ -438,7 +470,7 @@ def register_bill_routes(suite):
 
     @suite.get("/api/bills/<int:id>/<kind>")
     def export(id, kind):
-        from .bill_exports import export_bill_pdf, export_bill_excel
+        from .supplied_form import export_supplied_pdf, export_supplied_excel
 
         if kind not in ("pdf", "excel"):
             raise ValueError("Choose PDF or Excel")
@@ -448,15 +480,45 @@ def register_bill_routes(suite):
                 return jsonify(error="Bill not found"), 404
             payload = json.loads(row["payload"])
             result = json.loads(row["result"])
+            if result.get("status") != "ready" or result.get("blockers"):
+                raise ValueError("Supplied form requires a ready bill")
+            try:
+                original, current = _load(db, payload["source_import"])
+                facts = _history_facts(
+                    db,
+                    case_facts(current, original["sha256"]),
+                    payload["selection"]["employee_code"],
+                )
+                rates = _rates(db)
+                if (
+                    original["sha256"] != payload["source_sha256"]
+                    or _hash(facts) != payload["facts_hash"]
+                    or _hash(rates) != payload["rates_hash"]
+                    or _prepare(facts, payload["selection"], rates) != result
+                ):
+                    raise ValueError(
+                        "Source evidence, ledger or rates changed; prepare a fresh bill"
+                    )
+            except OSError as error:
+                raise ValueError(
+                    "Original source unavailable; restore the evidence before exporting"
+                ) from error
             metadata = dict(
                 payload["selection"],
                 source_sha256=payload["source_sha256"],
                 status=row["status"],
                 bill_id=id,
+                supplied_template_id=request.args.get("template", "jodhpur_classic"),
             )
+            employee = db.execute(
+                "SELECT name FROM suite_employees WHERE employee_code=?",
+                (payload["selection"]["employee_code"],),
+            ).fetchone()
+            if employee:
+                metadata["employee_name"] = employee["name"]
             if row["review"]:
                 metadata["approval_review"] = json.loads(row["review"])
-            output = (export_bill_pdf if kind == "pdf" else export_bill_excel)(
+            output = (export_supplied_pdf if kind == "pdf" else export_supplied_excel)(
                 result, metadata
             )
             return send_file(

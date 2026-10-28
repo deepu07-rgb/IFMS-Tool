@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import re
 
-GRID_EXTRACTION_VERSION = "1"
+GRID_EXTRACTION_VERSION = "3"
 
 
 def literal_money(text):
@@ -79,12 +79,12 @@ def _intersection(horizontal, vertical):
     return [x, hs * x + hb]
 
 
-def _binary(image):
+def _binary(image, offset=12):
     import cv2
 
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     return cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35, 12
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35, offset
     )
 
 
@@ -146,13 +146,17 @@ def extract_statement_grid(
         raster_size=[int(rgb.shape[1]), int(rgb.shape[0])],
         assisted=template_mapping is not None,
         cells=[],
+        source_margin_regions=[],
         table_rows=[],
         semantic_rows=[],
         issues=[],
         review_required=True,
         coordinate_space="source raster pixels",
     )
-    binary = _binary(rgb)
+    # Faint printed outer rules can disappear at the OCR ink threshold, clipping
+    # the first handwriting baseline before recognition ever sees it. Geometry
+    # uses the same sensitive threshold here as the normalized rule detection.
+    binary = _binary(rgb, offset=2)
     horizontal, vertical = _lines(binary, True), _lines(binary, False)
     # Long text baselines can trigger Hough. Require continuous source ink
     # along the proposed rule, not merely a collinear run of glyphs.
@@ -212,8 +216,38 @@ def extract_statement_grid(
     )
     transform = cv2.getPerspectiveTransform(corners, target)
     inverse = np.linalg.inv(transform)
+    # A scan may cut off the outer rule. Retain the strip beyond the final
+    # measured vertical only when multiple printed rules visibly continue into
+    # it. The page edge bounds evidence; it does not establish another column.
+    continuing_rules = 0
+    for line in horizontal:
+        edge_x = _intersection(line, vertical[-1])[0]
+        axis = np.arange(int(edge_x) + 5, w - 5)
+        other = np.rint(line[0] * axis + line[1]).astype(int)
+        valid = (other >= 3) & (other < h - 3)
+        axis, other = axis[valid], other[valid]
+        if (
+            axis.size >= 16
+            and np.mean(np.any([binary[other + d, axis] for d in range(-2, 3)], axis=0))
+            >= 0.25
+        ):
+            continuing_rules += 1
+    margin_width = 0
+    if continuing_rules >= 2:
+        page_edge = np.float32(
+            [
+                [
+                    [w - 1, line[0] * (w - 1) + line[1]]
+                    for line in (horizontal[0], horizontal[-1])
+                ]
+            ]
+        )
+        edge_positions = cv2.perspectiveTransform(page_edge, transform)[0, :, 0]
+        margin_width = max(0, int(np.floor(np.min(edge_positions))) - width)
+        if margin_width < 16:
+            margin_width = 0
     normalized = cv2.warpPerspective(
-        rgb, transform, (width, height), borderValue=(255, 255, 255)
+        rgb, transform, (width + margin_width, height), borderValue=(255, 255, 255)
     )
     normalized_binary = _binary(normalized)
     # Geometry alone uses a sensitive threshold for faded printed rules.
@@ -231,12 +265,12 @@ def extract_statement_grid(
         cv2.getStructuringElement(cv2.MORPH_RECT, (25, 1)),
     )
     vmask = cv2.morphologyEx(
-        normalized_binary,
+        geometry_binary,
         cv2.MORPH_OPEN,
         cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(25, height // 8))),
     )
-    xs, ys = _positions(vmask, False), _positions(
-        cv2.dilate(hmask, np.ones((7, 1), np.uint8)), True
+    xs, ys = _positions(vmask[:, :width], False), _positions(
+        cv2.dilate(hmask[:, :width], np.ones((7, 1), np.uint8)), True
     )
     # Warping can clip the outer rules by a pixel; their measured corners remain evidence.
     xs = sorted(set([0, *[x for x in xs if 5 < x < width - 6], width - 1]))
@@ -251,7 +285,11 @@ def extract_statement_grid(
     clean = cv2.subtract(normalized_binary, cv2.bitwise_or(hmask, vmask))
     for row, (top, bottom) in enumerate(zip(ys, ys[1:])):
         values = []
-        for column, (left, right) in enumerate(zip(xs, xs[1:])):
+        spans = list(zip(xs, xs[1:]))
+        if margin_width:
+            spans.append((width, width + margin_width - 1))
+        for column, (left, right) in enumerate(spans):
+            is_margin = column == len(xs) - 1
             inset = 3
             box = [left + inset, top + inset, right - inset, bottom - inset]
             polygon = cv2.perspectiveTransform(
@@ -368,7 +406,7 @@ def extract_statement_grid(
                             if c["confidence"] >= minimum_confidence
                             and not c["boundary_ink"]
                         ]
-                        if len(bands) == 1 and len(accepted) == 1:
+                        if not is_margin and len(bands) == 1 and len(accepted) == 1:
                             cell.update(
                                 text=accepted[0]["text"],
                                 amount=accepted[0]["literal_amount"],
@@ -381,9 +419,25 @@ def extract_statement_grid(
                     except Exception as exc:
                         cell["status"] = "recognition_error"
                         cell["error"] = type(exc).__name__
-            result["cells"].append(cell)
-            values.append(cell["text"])
+            if is_margin:
+                cell.update(
+                    column=None,
+                    region_id="right_margin_r{}".format(row),
+                    status="source_geometry_unresolved",
+                    review_required=True,
+                    boundary_evidence="Observed horizontal rules continue beyond last vertical; source page edge bounds unassigned region",
+                    text=None,
+                    amount=None,
+                )
+                result["source_margin_regions"].append(cell)
+            else:
+                result["cells"].append(cell)
+                values.append(cell["text"])
         result["table_rows"].append(values)
+    if margin_width:
+        result["issues"].append(
+            "Source content beyond the last measured vertical rule retained as unassigned margin evidence; no statement column established"
+        )
     rows = result["table_rows"]
     if template_mapping is not None:
         rows = _mapped_rows(rows, template_mapping)
