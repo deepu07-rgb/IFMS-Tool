@@ -11,12 +11,20 @@ def reference_rates():
 
 
 def load_reference(db):
+    from .rate_library import rate_key, next_rate_id
+
     saved = 0
+    archived = [
+        json.loads(r["payload"])
+        for r in db.execute("SELECT payload FROM suite_rate_archives")
+    ]
     for p in reference_rates():
         existing = [
             json.loads(r["payload"])
             for r in db.execute("SELECT payload FROM suite_rates")
         ]
+        if any(rate_key(q) == rate_key(p) for q in archived):
+            continue
         if any(
             q["allowance"].upper() == p["allowance"]
             and q.get("category", "") == p["category"]
@@ -24,7 +32,10 @@ def load_reference(db):
             for q in existing
         ):
             continue
-        db.execute("INSERT INTO suite_rates(payload) VALUES(?)", (json.dumps(p),))
+        db.execute(
+            "INSERT INTO suite_rates(id,payload) VALUES(?,?)",
+            (next_rate_id(db), json.dumps(p)),
+        )
         saved += 1
     if not db.execute("SELECT 1 FROM suite_rules WHERE name='DA'").fetchone():
         db.execute(

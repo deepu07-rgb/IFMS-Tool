@@ -31,7 +31,14 @@ def _validate_shape(payload):
         not isinstance(row, dict) for row in payload["rows"]
     ):
         raise ValueError("Use up to 120 monthly row objects")
-    for key in ("employee_code", "employee_name", "kind", "rounding", "template_id"):
+    for key in (
+        "employee_code",
+        "employee_name",
+        "kind",
+        "rounding",
+        "template_id",
+        "hra_category",
+    ):
         if payload.get(key) is not None and not isinstance(payload[key], str):
             raise ValueError("Worksheet " + key + " must be text")
     if "include_hda" in payload and not isinstance(payload["include_hda"], bool):
@@ -49,7 +56,12 @@ def _validate_shape(payload):
 def _result(db, payload):
     _validate_shape(payload)
     result = calculate_worksheet(payload)
-    errors = linked_errors(db, payload)
+    from .rate_library import worksheet_rate_checks
+
+    validation = worksheet_rate_checks(db, payload)
+    result["warnings"] = validation["warnings"]
+    result["rate_checks"] = validation["checks"]
+    errors = linked_errors(db, payload) + validation["errors"]
     if errors:
         result["errors"].extend(errors)
         result.update(status="incomplete")
@@ -255,7 +267,7 @@ def register_worksheets(suite):
                     "Saved ledger source is stale or edited; reload it before export"
                 )
         return send_file(
-            export_workbook(record["payload"]),
+            export_workbook(record["payload"], record["result"]),
             download_name=f"IFMS-Due-Drawn-{ident}.xlsx",
             as_attachment=True,
         )

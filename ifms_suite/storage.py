@@ -41,3 +41,13 @@ def initialize():
         CREATE TABLE IF NOT EXISTS suite_imports(id INTEGER PRIMARY KEY,sha256 TEXT UNIQUE NOT NULL,filename TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'needs_review',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         """
         )
+
+        from .rate_library import initialize_rates
+
+        initialize_rates(db)
+
+        from .slab_library import initialize_slabs
+        from .document_library import initialize_library
+
+        initialize_slabs(db)
+        initialize_library(db)

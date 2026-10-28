@@ -7,7 +7,7 @@ from decimal import Decimal
 from .calculation import money, rounded
 from .supplied_form import HEADS, TEMPLATES
 
-VERSION = "ifms-assisted-worksheet-v1"
+VERSION = "ifms-assisted-worksheet-v2"
 KINDS = ("hra", "da", "increment", "manual")
 DEDUCTION_KEYS = tuple(
     dict.fromkeys(k for t in TEMPLATES.values() for k in t["deduction_keys"])
@@ -42,6 +42,10 @@ COLUMNS = (
     ("bill_date", "Bill date", "details"),
     ("tv_no", "TV number", "details"),
     ("tv_date", "TV date", "details"),
+    ("da_override_reason", "DA manual exception reference", "exceptions"),
+    ("hra_override_reason", "HRA manual exception reference", "exceptions"),
+    ("hra_exempt", "HRA not payable: Yes / No", "exceptions"),
+    ("hra_exemption_reference", "HRA non-entitlement reference", "exceptions"),
     ("ledger_payment_id", "Saved ledger ID (do not edit)", "link"),
     ("ledger_snapshot", "Saved ledger fingerprint (do not edit)", "link"),
 )

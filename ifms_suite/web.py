@@ -121,59 +121,30 @@ def employees():
 
 @suite.route("/api/rates", methods=["GET", "POST"])
 def rates():
-    from datetime import date
-    from .calculation import money
+    from .rate_library import save_rate
 
     with database() as db:
         if request.method == "GET":
             return jsonify(
                 [
-                    dict(id=r["id"], **json.loads(r["payload"]))
+                    dict(
+                        json.loads(r["payload"]),
+                        id=r["id"],
+                        revision=json.loads(r["payload"]).get("revision", 1),
+                    )
                     for r in db.execute("SELECT * FROM suite_rates")
                 ]
             )
-        p = request.get_json() or {}
-        for k in ["allowance", "effective_from", "rate", "reference"]:
-            if p.get(k) in ("", None):
-                raise ValueError("Required: " + k)
-        date.fromisoformat(p["effective_from"])
-        money(p["rate"])
-        p["verification"] = "manual"
-        p["basis"] = p.get("basis", "basic")
-        p["allowance"] = str(p["allowance"]).strip().upper()
-        p["category"] = p.get("category", "").strip().upper()
-        p["effective_from"] = date.fromisoformat(p["effective_from"]).isoformat()
-        existing = None
-        for row in db.execute("SELECT * FROM suite_rates"):
-            q = json.loads(row["payload"])
-            if (
-                q["allowance"].upper() == p["allowance"]
-                and q.get("category", "") == p["category"]
-                and q["effective_from"] == p["effective_from"]
-            ):
-                existing = row
-                break
-        if existing:
-            if not p.get("override_reason"):
-                return (
-                    jsonify(
-                        error="Rate already exists. Provide an override reason to replace it; previous version is retained."
-                    ),
-                    409,
-                )
-            id = existing["id"]
-            db.execute(
-                "INSERT INTO suite_rate_audit(rate_id,previous_payload,new_payload,reason) VALUES(?,?,?,?)",
-                (id, existing["payload"], json.dumps(p), p["override_reason"]),
+        db.execute("BEGIN IMMEDIATE")
+        saved, error = save_rate(db, request.get_json() or {})
+        if error:
+            return (
+                jsonify(
+                    error="Rate already exists. Provide an override reason to replace it; previous version is retained."
+                ),
+                409,
             )
-            db.execute(
-                "UPDATE suite_rates SET payload=? WHERE id=?", (json.dumps(p), id)
-            )
-        else:
-            id = db.execute(
-                "INSERT INTO suite_rates(payload) VALUES(?)", (json.dumps(p),)
-            ).lastrowid
-        return jsonify(id=id, **p), 201
+        return jsonify(saved), 201
 
 
 @suite.route("/api/claims", methods=["GET", "POST"])
@@ -714,3 +685,13 @@ register_ledger(suite)
 from .worksheet_routes import register_worksheets
 
 register_worksheets(suite)
+
+from .rate_library import register_rate_library
+
+register_rate_library(suite)
+
+from .slab_library import register_slabs
+from .document_library import register_document_library
+
+register_slabs(suite)
+register_document_library(suite)

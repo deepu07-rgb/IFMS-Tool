@@ -162,3 +162,32 @@ def test_excel_can_leave_unused_trailing_rows_blank(tmp_path):
     assert w["Due drawn statement"]["AA6"].value == 4960
     assert w["Due drawn statement"]["AA7"].value is None
     assert w["Due drawn statement"]["AA8"].value == 4960
+
+
+def test_rate_exceptions_and_hra_category_survive_excel_roundtrip():
+    from ifms_suite.worksheet_excel import export_workbook, import_workbook
+
+    p = example(hra_category="Y")
+    p["rows"][0].update(
+        da_override_reason="Synthetic specific exception",
+        hra_override_reason="Synthetic HRA exception",
+        hra_exempt=False,
+        hra_exemption_reference="",
+    )
+    result = import_workbook(export_workbook(p))
+    assert result.get("hra_category") == "Y"
+    assert result["rows"][0]["da_override_reason"] == "Synthetic specific exception"
+    assert result["rows"][0]["hra_exempt"] is False
+
+
+def test_previous_published_v1_template_is_still_importable():
+    from pathlib import Path
+    from ifms_suite.worksheet_excel import import_workbook
+
+    with (
+        Path(__file__).resolve().parents[1]
+        / "examples/IFMS-Formula-Due-Drawn-Template.xlsx"
+    ).open("rb") as stream:
+        p = import_workbook(stream)
+    assert len(p["rows"]) == 12
+    assert p["rows"][0]["month"] == "2026-01"

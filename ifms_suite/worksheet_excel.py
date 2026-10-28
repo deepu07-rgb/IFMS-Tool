@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 from zipfile import ZipFile, BadZipFile
+import json
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.comments import Comment
@@ -31,6 +32,14 @@ SETUP = {
     "template_id": 7,
     "include_hda": 8,
 }
+BOOLEAN_FIELDS = ("history_reviewed", "deductions_reviewed", "hra_exempt")
+EXTRA_FIELDS = {
+    "da_override_reason",
+    "hra_override_reason",
+    "hra_exempt",
+    "hra_exemption_reference",
+}
+LEGACY_COLUMNS = tuple(c for c in COLUMNS if c[0] not in EXTRA_FIELDS)
 NUMERIC = AMOUNT_FIELDS | {"new_basic", "da_rate", "hra_rate", "hda_divisor"}
 SALARY_COLUMNS = (
     "employee_code",
@@ -98,7 +107,7 @@ def _list(sheet, column, formula, first=6, last=125):
     validation.add(f"{column}{first}:{column}{last}")
 
 
-def export_workbook(payload):
+def export_workbook(payload, validation=None):
     rows = payload.get("rows") or [{}]
     if (
         not isinstance(rows, list)
@@ -148,6 +157,12 @@ def export_workbook(payload):
             value = "Yes" if value is True else "No"
         _literal(setup.cell(r, 2), value)
         setup.cell(r, 2).fill = BLUE
+    setup["A14"] = "HRA category (Y / Z / employee-specific)"
+    _literal(setup["B14"], payload.get("hra_category"))
+    setup["B14"].fill = BLUE
+    setup["A15"] = (
+        "Current rate library is checked in the app, not by standalone formulas."
+    )
     setup["A10"] = (
         "Fill blue cells. The supplied statement updates automatically in Excel."
     )
@@ -191,9 +206,7 @@ def export_workbook(payload):
                     value = float(money(value))
                 except ValueError:
                     pass  # Invalid literal stays visible and fails the row check.
-            if key in ("history_reviewed", "deductions_reviewed") and isinstance(
-                value, bool
-            ):
+            if key in BOOLEAN_FIELDS and isinstance(value, bool):
                 value = "Yes" if value else "No"
             if key in ("start", "end") and value:
                 try:
@@ -210,7 +223,7 @@ def export_workbook(payload):
                 cell.number_format = "yyyy-mm-dd"
         if key == "presentation":
             _list(inputs, get_column_letter(col), "period,whole_month")
-        if key in ("history_reviewed", "deductions_reviewed"):
+        if key in BOOLEAN_FIELDS:
             _list(inputs, get_column_letter(col), "Yes,No")
     last_check = len(COLUMNS) + 1
     inputs.cell(5, last_check, "INPUT CHECK")
@@ -333,6 +346,39 @@ def export_workbook(payload):
         guide.cell(i, 1).alignment = Alignment(wrap_text=True, vertical="top")
         guide.row_dimensions[i].height = 48 if len(text) > 100 else 28
     guide.column_dimensions["A"].width = 125
+    if validation is not None:
+        checks = book.create_sheet("Rate checks")
+        checks.append(
+            [
+                "Validation snapshot only; return workbook to app for current-library checking after edits."
+            ]
+        )
+        checks.append(["Row", "Head / field", "Status", "Details / source"])
+        for item in validation.get("rate_checks", []):
+            checks.append(
+                [
+                    item["row"] + 1,
+                    item["head"],
+                    item["status"],
+                    json.dumps(item, ensure_ascii=False),
+                ]
+            )
+        for item in validation.get("warnings", []) + validation.get("errors", []):
+            checks.append(
+                [
+                    item["row"] + 1 if item.get("row") is not None else "Setup",
+                    item.get("field", ""),
+                    "Review required",
+                    item.get("message", ""),
+                ]
+            )
+        for cells in checks:
+            for cell in cells:
+                if isinstance(cell.value, str):
+                    cell.data_type = "s"
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+        for col in ("A", "B", "C", "D"):
+            checks.column_dimensions[col].width = 24 if col != "D" else 90
     book.calculation = CalcProperties(
         calcId=191029, fullCalcOnLoad=True, forceFullCalc=True
     )
@@ -442,26 +488,30 @@ def _check_formula(i):
 
 def import_workbook(stream):
     book = _open(stream)
-    if (
-        not {"Setup", "Monthly inputs"} <= set(book.sheetnames)
-        or _value(book["Setup"]["B2"]) != VERSION
-    ):
+    if not {"Setup", "Monthly inputs"} <= set(book.sheetnames):
+        raise ValueError("Use the downloaded IFMS formula workbook template")
+    version = _value(book["Setup"]["B2"])
+    if version not in (VERSION, "ifms-assisted-worksheet-v1"):
         raise ValueError("Use the downloaded IFMS formula workbook template")
     sheet = book["Monthly inputs"]
-    if [_value(sheet.cell(5, i)) for i in range(1, len(COLUMNS) + 1)] != [
-        c[0] for c in COLUMNS
+    columns = LEGACY_COLUMNS if version == "ifms-assisted-worksheet-v1" else COLUMNS
+    if [_value(sheet.cell(5, i)) for i in range(1, len(columns) + 1)] != [
+        c[0] for c in columns
     ]:
         raise ValueError("Monthly input headers differ from the template")
     result = {key: _value(book["Setup"].cell(r, 2)) for key, r in SETUP.items()}
+    category = _value(book["Setup"]["B14"])
+    if category is not None:
+        result["hra_category"] = category
     if result["include_hda"] not in ("Yes", "No"):
         raise ValueError("Include HDA must be Yes or No")
     result["include_hda"] = result["include_hda"] == "Yes"
     rows = []
-    for cells in sheet.iter_rows(min_row=6, max_col=len(COLUMNS)):
+    for cells in sheet.iter_rows(min_row=6, max_col=len(columns)):
         if not any(c.value not in (None, "") for c in cells):
             continue
         row = {}
-        for (key, _, _), cell in zip(COLUMNS, cells):
+        for (key, _, _), cell in zip(columns, cells):
             value = _value(cell)
             if value is None:
                 continue
@@ -471,7 +521,7 @@ def import_workbook(stream):
                 and not isinstance(value, bool)
             ):
                 value = format(Decimal(str(value)), "f")
-            if key in ("history_reviewed", "deductions_reviewed"):
+            if key in BOOLEAN_FIELDS:
                 if value not in ("Yes", "No"):
                     raise ValueError("Review fields must be Yes or No")
                 value = value == "Yes"
