@@ -1,0 +1,24 @@
+.reference-card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:12px; }
+.reference-card { border:1px solid #bbd0d2; border-radius:8px; padding:14px; min-width:0; overflow-wrap:anywhere; background:#faffff; }
+.reference-card[draggable="true"] { cursor:grab; }
+.reference-card h3 { margin:0 0 8px; }
+.reference-card button { margin:4px; }
+.reference-wide { display:flex; width:100%; }
+.reference-wide textarea { min-height:70px; }
+.reference-picker { position:fixed; z-index:32; right:16px; top:70px; width:min(430px,calc(100vw - 24px)); max-height:75vh; overflow:auto; padding:16px; background:white; box-shadow:0 8px 36px #183b4666; border:1px solid #819fa4; border-radius:10px; }
+.reference-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.reference-window { position:fixed; z-index:30; display:flex; flex-direction:column; width:430px; height:520px; min-width:min(260px,calc(100vw - 16px)); min-height:150px; max-width:calc(100vw - 16px); max-height:calc(100vh - 16px); resize:both; overflow:hidden; border:2px solid #37757e; border-radius:9px; background:#fff; box-shadow:0 5px 24px #183b4644; }
+.reference-window:focus-within { z-index:31; }
+.reference-window-header { display:flex; align-items:center; gap:6px; flex:0 0 auto; min-height:42px; padding:8px; color:white; background:#174b54; cursor:move; touch-action:none; }
+.reference-window-header strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.reference-window-header button { cursor:pointer; font-size:12px; }
+.reference-window-body { flex:1 1 auto; min-height:0; overflow:auto; padding:10px; }
+.reference-window-body iframe { width:100%; height:calc(100% - 70px); min-height:180px; }
+.reference-window-body pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:none; font:14px/1.5 system-ui; }
+.reference-window-body .reference-metadata { font-size:12px; color:#61787e; }
+.reference-window table { font-size:12px; }
+.reference-window.dragging iframe { pointer-events:none; }
+#referenceDeskToggle { margin-top:15px; width:100%; }
+.reference-drop-target { outline:3px dashed #1a7b86; outline-offset:-5px; }
+#worksheetWarnings { color:#744b00; padding:0 10px; background:#fff5d5; }
+@media(max-width:800px) { .reference-window { width:calc(100vw - 16px); height:45vh; } #referenceDeskToggle { width:auto; } }

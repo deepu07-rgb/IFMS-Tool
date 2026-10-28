@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>IFMS Workspace</title>
+    <link rel="stylesheet" href="{{ url_for('suite.static',filename='reference_desk.css') }}">
     <style>
       [hidden] { display: none !important; }
       * {
@@ -193,6 +194,7 @@
       <h1>IFMS Workspace</h1>
       <small>Salary records & arrear preparation</small>
       <nav id="navigation"></nav>
+      <button type="button" class="action" id="referenceDeskToggle">References · open / pin</button>
     </aside>
     <main>
       <div id="message" role="status"></div>
@@ -376,6 +378,7 @@
             <label>Claim from<input name="claim_start" type="date" required></label>
             <label>Through (inclusive)<input name="claim_end" type="date" required></label>
             <label>Type of arrear<select name="kind"><option value="hra">HRA</option><option value="da">DA revision</option><option value="increment">Basic pay / increment / ACP</option><option value="manual">Explicit monthly due amounts</option></select></label>
+            <label>HRA category<select name="hra_category"><option value="">Select category</option><option>Y</option><option>Z</option></select></label>
             <label>Rounding<select name="rounding"><option value="rupee">Nearest rupee per head</option><option value="paise">Two decimals per head</option></select></label>
             <label>Supplied form<select name="template_id"><option value="jodhpur_classic">GPF / SI / CM Corona / Income tax</option><option value="jodhpur_gpf_arrear">GPF to deduct / GPF &amp; SIF already deducted</option></select></label>
             <label><input name="include_hda" type="checkbox">Recalculate HDA using an approved divisor</label>
@@ -407,6 +410,8 @@
             </div>
             <div id="worksheetTables"></div>
             <div id="worksheetErrors" aria-live="polite"></div>
+            <div id="worksheetWarnings" aria-live="polite"></div>
+            <button type="button" class="action" id="worksheetUseRates">Use dated library DA / HRA rates</button>
             <button type="button" class="action" id="worksheetCalculate">Check and calculate</button>
             <button type="button" class="action" id="worksheetSave">Save draft</button>
             <button type="button" class="action" id="worksheetExcel">Export formula Excel</button>
@@ -739,6 +744,7 @@
           <div id="incrementResult"></div>
         </div>
       </section>
+      {% include 'reference_desk.html' %}
       <section id="rates">
         <h1>Rates & Allowance Library</h1>
         <div class="card">
@@ -775,7 +781,13 @@
           <div id="rulesTable"></div>
         </div>
         <div class="card">
+          <h2 id="rateEditorTitle">Add a dated allowance rate</h2>
           <form id="rateForm">
+            <input type="hidden" name="rate_id"><input type="hidden" name="revision">
+            <label>Calculation basis<select name="basis"><option value="basic">Percentage of basic</option><option value="basic_da">Percentage of basic + DA</option><option value="fixed">Fixed monthly amount</option><option value="daily">Daily amount</option></select></label>
+            <label>Effective through (optional)<input name="effective_to" type="date"></label>
+            <label>Cash payable from (if order differs from effective date)<input name="cash_from" type="date"></label>
+            <label>Rate rounding<select name="rounding"><option value="rupee">Nearest rupee</option><option value="paise">Two decimals</option></select></label>
             <label
               >Allowance<input name="allowance" required value="DA" /></label
             ><label
@@ -803,7 +815,7 @@
             ><label
               >Reason if replacing an existing effective-date rate<input
                 name="override_reason" /></label
-            ><button class="action">Save manual rate</button>
+            ><button class="action">Save manual rate</button><button type="button" class="action" id="rateEditorNew">New dated rate</button>
           </form>
           <p class="muted">
             Verified entries identify the official source. Manually entered
@@ -811,6 +823,7 @@
             before use.
           </p>
           <div id="ratesTable"></div>
+          <details><summary>Archived rates · restore or review history</summary><button type="button" class="action" id="loadArchivedRates">Load archived rates</button><div id="archivedRatesTable"></div></details>
         </div>
       </section>
       <section id="reports">
@@ -884,5 +897,6 @@
     <script src="{{ url_for('suite.static',filename='suite.js') }}"></script>
     <script src="{{ url_for('suite.static',filename='ledger.js') }}"></script>
     <script src="{{ url_for('suite.static',filename='worksheet.js') }}"></script>
+    <script src="{{ url_for('suite.static',filename='reference_desk.js') }}"></script>
   </body>
 </html>

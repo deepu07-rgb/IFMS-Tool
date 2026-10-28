@@ -177,3 +177,60 @@ def test_rate_edit_conflict_and_negative_amount_are_rejected(client):
     )
     custom = rate(client, allowance="UNIFORM ALLOWANCE", basis="fixed", rate="7000")
     assert custom["basis"] == "fixed"
+
+
+def test_new_fixed_allowance_creates_matching_rule_without_overwriting_existing_rules(
+    client,
+):
+    rate(client, allowance="UNIFORM ALLOWANCE", basis="fixed", rate="7000")
+    rules = client.get("/suite/api/rules").json
+    uniform = next((r for r in rules if r["name"] == "UNIFORM ALLOWANCE"), None)
+    assert uniform and uniform["basis"] == "fixed"
+    edited = dict(uniform, proration="thirty")
+    assert client.post("/suite/api/rules", json=edited).status_code == 201
+    rate(
+        client,
+        allowance="UNIFORM ALLOWANCE",
+        basis="fixed",
+        rate="7500",
+        effective_from="2041-01-01",
+    )
+    assert (
+        next(
+            r
+            for r in client.get("/suite/api/rules").json
+            if r["name"] == "UNIFORM ALLOWANCE"
+        )["proration"]
+        == "thirty"
+    )
+
+
+def test_form_edit_preserves_cash_date_and_existing_order_metadata(client):
+    saved = rate(
+        client,
+        cash_from="2040-03-01",
+        rounding="rupee",
+        notes="Synthetic cash/GPF treatment",
+        source_file="synthetic-order.pdf",
+        source_sha256="a" * 64,
+    )
+    edited = client.post(
+        f"/suite/api/rates/{saved['id']}",
+        json=dict(
+            allowance="DA",
+            category="",
+            effective_from="2040-01-01",
+            effective_to="",
+            rate="61",
+            basis="basic",
+            rounding="rupee",
+            reference="Synthetic order amended",
+            order_date="2040-04-01",
+            override_reason="Synthetic rate correction; original cash treatment unchanged",
+            revision=saved["revision"],
+        ),
+    )
+    assert edited.status_code == 200
+    assert edited.json.get("cash_from") == "2040-03-01"
+    assert edited.json.get("notes") == "Synthetic cash/GPF treatment"
+    assert edited.json.get("source_sha256") == "a" * 64

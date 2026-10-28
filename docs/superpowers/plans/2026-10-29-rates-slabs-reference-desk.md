@@ -21,26 +21,28 @@
 
 ### Task 1: Important-document repository
 Files: new ifms_suite/document_library.py and tests/test_document_library.py. Interfaces initialize_library(db), register_document_library(suite); /api/library/categories and /api/library/documents list/create/get/update/archive/content. Metadata and contracts in spec; return id/revision/archive state, safe extracted_text and SHA-backed original. TDD category, PDF/DOCX/typed search, edit conflict, archive/restore, unsafe upload and source integrity. Owner independent; shared storage/web wiring by coordinator.
-- [ ] Observe failing tests, implement, verify targeted tests.
+- [x] Observe failing tests, implement, verify targeted tests.
 
 ### Task 2: Effective salary slab repository
 Files: new ifms_suite/slab_library.py and tests/test_slab_library.py. Interfaces initialize_slabs(db), register_slabs(suite), suggest_slab(db,scheme,on,basic=None,da=None,gross=None,category=''). /api/slabs GET/POST, /<id> POST revision edit, /<id>/archive POST revision/reason/archived, /suggest GET. Schema: name,scheme,basis,category,effective_from,effective_to,reference,rounding,slabs[{lower,upper,kind:'fixed'|'percent',value}]. Return full_subscription_reference_only=true. TDD boundaries, dates, overlap, stale edits and archive.
-- [ ] Observe failing tests, implement, verify targeted tests.
+- [x] Observe failing tests, implement, verify targeted tests.
 
 ### Task 3: Rates and worksheet validation
 Files: new ifms_suite/rate_library.py; existing web.py/reference.py/storage.py/worksheet_routes.py/worksheet.py/worksheet_excel.py; tests/test_rate_library.py and worksheet tests. Preserve existing rate POST contract; add archive/restore and audited edit. worksheet_rate_checks(db,payload)->{errors,warnings,checks}; row errors match existing highlighting. Add backward-compatible category and per-row exemption/override fields; do not trust Excel cached outputs.
-- [ ] Reproduce wrong DA acceptance, add failing date/override/archive tests.
-- [ ] Implement validation, source-aware messages, dated suggestions and current-data export rechecks.
-- [ ] Run targeted tests and schema round trips.
+- [x] Reproduce wrong DA acceptance, add failing date/override/archive tests.
+- [x] Implement validation, source-aware messages, dated suggestions and current-data export rechecks.
+- [x] Run targeted tests and schema round trips.
 
 ### Task 4: Libraries and reference-window UI
 Files: new static/reference_desk.js, templates/reference_desk.html, static/reference_desk.css; modify suite.html/suite.js/worksheet.js. Rates editable/reversible; slab form and independent calculator; searchable document categories/upload/text/edit. Drag or click to pin, move/resize/persist up to6 panels and quick-search from any module. Integrate suggestions/warnings into Excel maker.
-- [ ] Actual browser absence/incorrect-rate baseline, then implement.
-- [ ] Verify create/save/edit/remove/restore, document search/pin, navigational persistence, resize and preserved bill inputs.
+- [x] Actual browser absence/incorrect-rate baseline, then implement.
+- [x] Verify create/save/edit/remove/restore, document search/pin, navigational persistence, resize and preserved bill inputs.
 
 ### Task 5: Sample bill and completion evidence
-- [ ] Use earlier source-reviewed full bill and partial case, explicitly separate human assistance and authority assumptions.
-- [ ] Generate supplied-format PDF/Excel, test incorrect DA plus corrected/new effective rate and GPF/SI slab references without adding deductions twice.
-- [ ] Run full suite, independent review, fix Important regressions with RED->GREEN, save screenshots/report and docs, push existing feature branch without bundling.
+- [x] Use earlier source-reviewed full bill and partial case, explicitly separate human assistance and authority assumptions.
+- [x] Generate supplied-format PDF/Excel, test incorrect DA plus corrected/new effective rate and GPF/SI slab references without adding deductions twice.
+- [x] Run full suite, independent review, fix Important regressions with RED->GREEN, save screenshots/report and docs, push existing feature branch without bundling.
 
 Pre-flight: document and slab repositories share only coordinator storage/web registration; separate owned files. Rates/worksheet contracts feed UI; changing rate library must be checked at every worksheet read/export. No unresolved interface conflict.
+
+Completion evidence:665passed14skipped; private full-app browser/sample/exports report retained outside Git. Independent review Important findings fixed with RED->GREEN tests; no deferrals. Source cases remain explicitly human-assisted and conditional; bundling paused.

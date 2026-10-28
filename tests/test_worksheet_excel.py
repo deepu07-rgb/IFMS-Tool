@@ -185,8 +185,7 @@ def test_previous_published_v1_template_is_still_importable():
     from ifms_suite.worksheet_excel import import_workbook
 
     with (
-        Path(__file__).resolve().parents[1]
-        / "examples/IFMS-Formula-Due-Drawn-Template.xlsx"
+        Path(__file__).resolve().parents[1] / "tests/fixtures/worksheet-v1.xlsx"
     ).open("rb") as stream:
         p = import_workbook(stream)
     assert len(p["rows"]) == 12

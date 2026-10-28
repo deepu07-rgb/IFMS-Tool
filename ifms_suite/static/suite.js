@@ -18,6 +18,8 @@ const modules = [
   ["excel_arrear_maker", "Excel Arrear Maker"],
   ["arrears", "Arrear / Due–Drawn"],
   ["rates", "Rates & Allowances"],
+  ["salary_slabs", "GPF & SI Slabs"],
+  ["important_documents", "Important Documents"],
   ["schedules", "Schedules & Comparison"],
   ["reports", "Reports & Backup"],
 ];
@@ -78,6 +80,8 @@ function openModule(id) {
     .querySelectorAll("nav button")
     .forEach((b) => b.classList.toggle("active", b.dataset.module === id));
   refresh().catch((e) => notify(e.message));
+  if (id === "important_documents" && typeof loadDocumentLibrary === "function") loadDocumentLibrary().catch(e=>notify(e.message));
+  if (id === "salary_slabs" && typeof loadSlabLibrary === "function") loadSlabLibrary().catch(e=>notify(e.message));
   if (id === "excel_arrear_maker" && typeof loadWorksheetWorkspace === "function") {
     loadWorksheetWorkspace().catch(e => notify(e.message));
   }
@@ -155,7 +159,6 @@ function deductions() {
 }
 for (const [form, path] of [
   ["employeeForm", "employees"],
-  ["rateForm", "rates"],
   ["ruleForm", "rules"],
 ]) {
   $(form).onsubmit = async (e) => {
@@ -635,15 +638,8 @@ async function refresh() {
     "rounding",
     "reference",
   ]);
-  $("ratesTable").innerHTML = table(rates, [
-    "allowance",
-    "category",
-    "effective_from",
-    "rate",
-    "order_date",
-    "reference",
-    "verification",
-  ]);
+  if (typeof renderManagedRates === 'function') renderManagedRates(rates);
+  else $('ratesTable').innerHTML=table(rates,['allowance','category','effective_from','rate','reference']);
   renderRateReference();
   $("importsList").innerHTML = imports
     .filter(i => !$("documentKindFilter").value || i.payload.kind === $("documentKindFilter").value)

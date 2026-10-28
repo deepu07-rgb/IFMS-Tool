@@ -1,0 +1,53 @@
+<section id="important_documents">
+  <h1>Important Documents</h1>
+  <p>Keep orders, typed rules and source files together. Drag a card or choose Pin beside work to keep it visible in every module.</p>
+  <div class="card">
+    <h2>Search the order library</h2>
+    <form id="documentSearch"><label>Search title, order number, tags or searchable text<input name="q" type="search"></label><label>Category<select name="category_id" class="document-category"><option value="">All categories</option></select></label><label><input name="include_archived" type="checkbox">Include archived documents</label><button class="action">Search</button></form>
+    <div id="documentLibraryResults" class="reference-card-grid" aria-live="polite"></div>
+  </div>
+  <div class="card">
+    <h2>Categories</h2>
+    <form id="documentCategoryForm"><label>Category name<input name="name" required placeholder="Travelling Allowance Rules"></label><button class="action">Create category</button></form>
+    <form id="documentCategoryRename"><label>Existing category<select name="id" class="document-category" required></select></label><label>New name<input name="name" required></label><button class="action">Rename category</button></form>
+  </div>
+  <div class="card">
+    <h2 id="documentEditorTitle">Add an order or typed rule</h2>
+    <form id="documentEditor">
+      <label>Title<input name="title" required maxlength="500"></label><label>Category<select name="category_id" class="document-category"><option value="">Uncategorized</option></select></label>
+      <label>Order number<input name="order_number"></label><label>Order date<input name="order_date" type="date"></label><label>Effective from<input name="effective_from" type="date"></label><label>Effective through<input name="effective_to" type="date"></label>
+      <label>Tags / keywords<input name="tags" placeholder="TA, mileage, Rajasthan, 2026"></label><label>PDF or DOCX original (up to 10 MiB)<input name="file" type="file" accept=".pdf,.docx"></label>
+      <label class="reference-wide">Notes<textarea name="notes" rows="2"></textarea></label><label class="reference-wide">Typed rule, slab text or additional explanation<textarea name="body" rows="5"></textarea></label>
+      <button class="action">Save document</button><button class="action" type="button" id="documentEditorNew">New entry</button>
+    </form>
+    <p class="muted">PDF text and DOCX paragraphs/tables are indexed locally. Scanned PDFs without selectable text can be found by their title, tags and notes. DOCX preview shows extracted text; the original remains downloadable.</p>
+  </div>
+</section>
+<section id="salary_slabs">
+  <h1>GPF &amp; SI Salary Slabs</h1>
+  <p>Enter the applicable office-authorized schedules. Suggestions are full subscriptions for reference; they are not automatically added as extra arrear deductions.</p>
+  <div class="card">
+    <form id="slabSearch"><label>Search<input name="q" type="search"></label><label><input name="include_archived" type="checkbox">Include archived schedules</label><button class="action">Search schedules</button></form><div id="slabLibraryResults" class="reference-card-grid"></div>
+  </div>
+  <div class="card">
+    <h2 id="slabEditorTitle">Add a salary slab schedule</h2>
+    <form id="slabEditor">
+      <label>Name<input name="name" required></label><label>Scheme<select name="scheme"><option>GPF</option><option>GPF-2004</option><option>GPF-SAB</option><option>SI</option></select></label>
+      <label>Salary basis<select name="basis"><option value="basic">Monthly basic</option><option value="basic_da">Monthly basic + DA amount</option><option value="gross">Monthly gross salary</option></select></label>
+      <label>Category / employee group (blank means general)<input name="category"></label><label>Effective from<input name="effective_from" type="date" required></label><label>Effective through<input name="effective_to" type="date"></label>
+      <label>Rounding<select name="rounding"><option value="rupee">Nearest rupee</option><option value="paise">Two decimals</option></select></label><label>Order / authority reference<input name="reference" required></label>
+      <div class="scroll"><table><thead><tr><th>Salary from (included)</th><th>Salary below (excluded; blank = no ceiling)</th><th>Subscription method</th><th>Amount / percentage</th><th></th></tr></thead><tbody id="slabEditorRows"></tbody></table></div>
+      <button class="action" type="button" id="slabAddRow">Add slab row</button><button class="action">Save schedule</button><button class="action" type="button" id="slabEditorNew">New schedule</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Look up the full subscription</h2>
+    <form id="slabSuggestion"><label>Scheme<select name="scheme"><option>GPF</option><option>GPF-2004</option><option>GPF-SAB</option><option>SI</option></select></label><label>On date<input name="on" type="date" required></label><label>Category / group<input name="category"></label><label>Monthly basic<input name="basic" inputmode="decimal"></label><label>Monthly DA amount (not percentage)<input name="da" inputmode="decimal"></label><label>Monthly gross<input name="gross" inputmode="decimal"></label><button class="action">Find applicable slab</button></form><div id="slabSuggestionResult" aria-live="polite"></div>
+  </div>
+</section>
+<div id="referencePicker" class="reference-picker" hidden>
+  <div class="reference-toolbar"><b>Find a reference</b><button type="button" id="referencePickerClose" aria-label="Close reference search">Close</button></div>
+  <form id="referenceQuickSearch"><label>Search documents, rates and salary slabs<input name="q" type="search" placeholder="Order number, TA, GPF, DA…"></label><button class="action">Search</button></form>
+  <div id="referenceQuickResults" aria-live="polite"></div>
+</div>
+<div id="referenceWindows" aria-label="Pinned reference documents and rules"></div>

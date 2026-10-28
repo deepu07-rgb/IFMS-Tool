@@ -117,6 +117,7 @@ def save_rate(db, body, ident=None):
         raise ValueError("Active rate not found")
     if existing:
         old = json.loads(existing["payload"])
+        p = _normalize(dict(old, **body))
         revision = old.get("revision", 1)
         if ident is not None and (
             type(body.get("revision")) is not int or body["revision"] != revision
@@ -134,6 +135,20 @@ def save_rate(db, body, ident=None):
         p["revision"] = 1
         db.execute(
             "INSERT INTO suite_rates(id,payload) VALUES(?,?)", (ident, json.dumps(p))
+        )
+    if not db.execute(
+        "SELECT 1 FROM suite_rules WHERE name=?", (p["allowance"],)
+    ).fetchone():
+        rule = dict(
+            name=p["allowance"],
+            basis=p["basis"],
+            proration="calendar",
+            rounding=p.get("rounding") or "paise",
+            rounding_scope="month",
+            reference=p["reference"],
+        )
+        db.execute(
+            "INSERT INTO suite_rules VALUES(?,?)", (p["allowance"], json.dumps(rule))
         )
     db.execute(
         "INSERT INTO suite_rate_audit(rate_id,previous_payload,new_payload,reason) VALUES(?,?,?,?)",

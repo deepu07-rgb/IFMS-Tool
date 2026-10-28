@@ -65,3 +65,7 @@ Saved revisions retain previous and new inputs. Concurrent tab edits are rejecte
 This maker supports one effective segment per month, up to 120 consecutive months, and the two supplied five-head forms. Multiple changes within a month need separately reviewed monthly amounts and appropriate full-month coverage to avoid applying proration twice. It does not independently establish entitlement, earlier payment coverage or deduction authority, and it does not approve payment. PDF has the existing Latin-font limitation; use reviewed transliteration or Unicode Excel when a name/reference cannot be rendered.
 
 Handwriting OCR reliability has not been improved or certified by this change. Final Windows bundling remains paused for user acceptance; no production dependencies or models were added.
+
+## Dated rate checks and reference desk
+
+The new [rate/slab/document guide](REFERENCE_DESK.md) explains current-library validation, HRA exemption/manual exception references, user-maintained GPF/SI schedules and pinned orders beside the bill. Version2 exports retain these settings and include a rate-check snapshot when downloaded from the app; earlier Version1 workbooks are still accepted. Standalone spreadsheet arithmetic is not live statutory-rate validation.

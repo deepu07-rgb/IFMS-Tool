@@ -223,3 +223,21 @@ no installed-size or production-readiness claim is made.
 - Human-assisted repeat of two old samples: gross4960 and2774 match prior independent audit. These tests start with human-entered source facts. They do not establish OCR accuracy, governing entitlement/HDA authority, absence of other payments or final cash approval.
 - Blank formula/salary workbooks contain no employee data. All source cases, reports and screenshots remain outside Git in `/workspace/review/excel-arrear-maker-2026-10-28`.
 - No new runtime packages/models and no release package produced. Installed Windows footprint has not been remeasured; final bundling remains paused for user acceptance.
+
+## Rates, salary slabs and reference desk — 29 October 2026
+
+Final full suite: **665 passed, 14 skipped**,82.31s; `/tmp/ifms-reference-desk-final-suite.log`. Added31 document-library tests,45 slab tests,9 rate-library tests, workbook compatibility/metadata tests and a DOCX backup-restore regression. Existing partial-statement rounding behavior was preserved when integrating rate edits; no previously passing tests remain failed.
+
+Independent reviewer `reference_desk_review` found two Important actual UI/API contract defects (typed-entry request format and omitted cash/source metadata on edits). Both have observed RED→GREEN verification. A later source-backup check found DOCX omission and was reproduced/fixed with restore verification. No Important deferrals.
+
+Actual browser via fresh private app workspace:
+- Category creation, typed rule saving, original PDF upload, searchable DOCX body/table text.
+- Rate save, fixed Uniform allowance, reversible rate archive/restore, explicitly synthetic future effective-date control.
+- GPF/SI schedule creation, exact upper/lower boundary, full-subscription lookup and no automatic arrear deduction.
+- Wrong entered DA62 vs saved library60 visibly blocked; dated-library correction; reviewed increment gross2774; supplied-form PDF/Excel downloads and workbook return preserving exemption/category metadata.
+- Reference drag, native resize, module/reload persistence, no-tab-switch quick search,390×844viewport bounds and no JavaScript errors.
+- Repeat human-assisted HRA gross4960; synthetic partial-date boundary4320. Old source authority/history/deduction caveats are retained; no unattended OCR accuracy claim or measured time-saving claim.
+
+Reproducible synthetic browser smoke: `python scripts/verify_reference_desk_browser.py --url http://127.0.0.1:<test-port>` (development Playwright required, no production dependency). The earlier `scripts/verify_worksheet_browser.py` continues to cover saved-draft HTTP races. Private actual-source evidence and sample bills are outside Git. Public blank templatev2 and blank legacyv1 fixture contain no employee data.
+
+No package/release workflow dispatched; final bundling remains paused. Runtime dependency files are unchanged; Windows installed-size certification awaits final packaging acceptance.

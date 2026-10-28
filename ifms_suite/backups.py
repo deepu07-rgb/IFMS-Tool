@@ -32,7 +32,7 @@ def create_bundle(db_path, uploads):
                     ("sources/" + p.relative_to(root).as_posix(), p)
                     for p in root.rglob("*")
                     if p.is_file()
-                    and p.suffix.lower() in (".pdf", ".xlsx")
+                    and p.suffix.lower() in (".pdf", ".xlsx", ".docx")
                     and not p.is_symlink()
                     and p.resolve().is_relative_to(root)
                 )
@@ -70,7 +70,7 @@ def validate_bundle(data):
                     raise ValueError("Unsafe backup path")
                 if name not in ("manifest.json", "database.sqlite") and not (
                     name.startswith("sources/")
-                    and name.lower().endswith((".pdf", ".xlsx"))
+                    and name.lower().endswith((".pdf", ".xlsx", ".docx"))
                 ):
                     raise ValueError("Unsupported backup entry")
             manifest = json.loads(z.read("manifest.json"))

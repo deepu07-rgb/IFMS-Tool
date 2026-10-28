@@ -3,7 +3,7 @@
 // Human-entered literals are the calculation input. OCR and spreadsheet formulas
 // never replace these figures. Saved drafts, revisions and ledger links live on the server.
 const worksheetState = {schema:null, payload:null, id:null, revision:null, dirty:false, tab:'drawn', result:null, salaryRecords:null, localPdf:null, epoch:0, saving:null};
-const worksheetMeta = ['employee_code','employee_name','kind','rounding','template_id','include_hda'];
+const worksheetMeta = ['employee_code','employee_name','kind','rounding','template_id','include_hda','hra_category'];
 const worksheetHeads = ['BASIC','DA','HRA','HDA','CCA'];
 const worksheetForm = $('worksheetSetup');
 const worksheetDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -24,6 +24,7 @@ function worksheetChanged() {
   $('worksheetSaveStatus').textContent = `${worksheetState.id ? 'Draft #'+worksheetState.id+' · revision '+worksheetState.revision : 'New draft'} · unsaved edits`;
   $('worksheetResult').textContent = 'Inputs changed. Choose Check and calculate to refresh the statement.';
   $('worksheetErrors').textContent = '';
+  $('worksheetWarnings').textContent = '';
   $('worksheetTables').querySelectorAll('.worksheet-invalid').forEach(e=>e.classList.remove('worksheet-invalid'));
 }
 function worksheetSet(payload, saved=null) {
@@ -68,6 +69,8 @@ function worksheetFields(tab) {
   if (tab === 'entitlement') {
     const fields = p.kind === 'manual' ? worksheetHeads.map(h=>'due_'+h) : p.kind === 'hra' ? ['hra_rate'] : p.kind === 'da' ? ['da_rate'] : ['new_basic','da_rate','hra_rate'];
     if (['da','increment'].includes(p.kind) && p.include_hda) fields.push('hda_divisor');
+    if(['da','increment'].includes(p.kind))fields.push('da_override_reason');
+    if(['hra','increment'].includes(p.kind))fields.push('hra_exempt','hra_exemption_reference','hra_override_reason');
     return [...fields,'order_reference'];
   }
   if (tab === 'prior') return [...worksheetHeads.map(h=>'prior_'+h),'history_reference','history_reviewed'];
@@ -93,7 +96,7 @@ function worksheetRender() {
     return `<div data-ws-panel="${tab}" ${tab===worksheetState.tab?'':'hidden'}><p>${helper[tab]}</p>${tools}<div class="scroll"><table class="worksheet-table" data-ws-table="${tab}"><thead><tr><th>Month</th>${fields.map(k=>`<th>${escapeHTML(schemas.get(k)?.label||k)}</th>`).join('')}${tab==='drawn'?'<th>Source link</th>':''}</tr></thead><tbody>${p.rows.map((row,i)=>`<tr><th>${escapeHTML(row.month||'Missing month')}</th>${fields.map(k=>{
       const value = row[k] ?? '';
       const common = `data-row="${i}" data-key="${k}" aria-label="${escapeHTML((schemas.get(k)?.label||k)+' '+(row.month||i+1))}"`;
-      if (k.endsWith('_reviewed')) return `<td><input ${common} type="checkbox" ${value===true?'checked':''}></td>`;
+      if (k.endsWith('_reviewed')||k==='hra_exempt') return `<td><input ${common} type="checkbox" ${value===true?'checked':''}></td>`;
       if (k==='presentation') return `<td><select ${common}><option value="period" ${value==='period'?'selected':''}>Affected days only</option><option value="whole_month" ${value==='whole_month'?'selected':''}>Whole month</option></select></td>`;
       const linked = k.startsWith('drawn_') && row.ledger_payment_id;
       const isAmount = ['drawn_','prior_','due_','ded_'].some(s=>k.startsWith(s)) || ['new_basic','da_rate','hra_rate','hda_divisor'].includes(k);
@@ -157,7 +160,7 @@ $('worksheetTables').onpaste = e=>{
   matrix.forEach((values,i)=>values.forEach((v,j)=>{
     const key=fields[start+j];let value=v.trim();
     if (['start','end'].includes(key)&&/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {const [d,m,y]=value.split('/');value=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
-    if (key.endsWith('_reviewed')) value=/^(yes|true)$/i.test(value);
+    if (key.endsWith('_reviewed')||key==='hra_exempt') value=/^(yes|true)$/i.test(value);
     worksheetState.payload.rows[firstRow+i][key]=value;
   }));
   worksheetChanged();worksheetRender();
@@ -185,7 +188,8 @@ $('worksheetLoadLedger').onclick = e=>worksheetBusy(e.target,async()=>{
 function worksheetRenderResult(result) {
   worksheetState.result=result;
   $('worksheetTables').querySelectorAll('.worksheet-invalid').forEach(e=>e.classList.remove('worksheet-invalid'));
-  if(!result){$('worksheetErrors').textContent='';$('worksheetResult').textContent='Choose Check and calculate after entering the monthly figures.';return;}
+  if(!result){$('worksheetErrors').textContent='';$('worksheetWarnings').textContent='';$('worksheetResult').textContent='Choose Check and calculate after entering the monthly figures.';return;}
+  $('worksheetWarnings').innerHTML=(result.warnings||[]).length?'<p><b>Rate / source checks need review</b></p><ul>'+result.warnings.map(w=>`<li>${w.row==null?'Setup':escapeHTML(worksheetState.payload.rows[w.row]?.month||'Month')}: ${escapeHTML(w.message)}</li>`).join('')+'</ul>':'';
   $('worksheetErrors').innerHTML=result.errors.length?`<p><b>${result.errors.length} fields or checks need attention.</b></p><ul>${result.errors.slice(0,100).map((err,i)=>`<li><button type="button" data-ws-error="${i}">${err.row==null?'Employee / setup':escapeHTML(worksheetState.payload.rows[err.row]?.month||'Row '+(err.row+1))} · ${escapeHTML(err.field.replaceAll('_',' '))}: ${escapeHTML(err.message)}</button></li>`).join('')}</ul>`:'';
   for(const err of result.errors){
     const input=err.row==null?worksheetForm.elements[err.field]:[...$('worksheetTables').querySelectorAll('[data-key]')].find(e=>Number(e.dataset.row)===err.row&&e.dataset.key===err.field);
@@ -300,3 +304,25 @@ $('worksheetSalaryImport').onsubmit=e=>{
     });
   });
 };
+
+$('worksheetUseRates').onclick=e=>worksheetBusy(e.target,async()=>{
+  const p=worksheetCollect();if(p.kind==='manual')throw Error('Manual monthly amounts need source review; use HRA, DA or increment mode to apply percentage rates.');
+  const rates=await api('rates');let applied=0;const unresolved=[];
+  for(const row of p.rows){
+    const heads=p.kind==='hra'?['HRA']:p.kind==='da'?['DA']:['DA','HRA'];
+    for(const head of heads){
+      if(head==='HRA'&&row.hra_exempt===true)continue;
+      const category=head==='HRA'?(p.hra_category||'').toUpperCase():'';
+      const candidates=rates.filter(r=>r.allowance.toUpperCase()===head&&(r.category||'').toUpperCase()===category);
+      const eligible=candidates.filter(r=>r.effective_from<=row.start&&(!r.effective_to||r.effective_to>=row.end));
+      const latest=eligible.map(r=>r.effective_from).sort().at(-1),matches=eligible.filter(r=>r.effective_from===latest);
+      if(matches.length!==1||candidates.some(r=>r.effective_from>row.start&&r.effective_from<=row.end)) {unresolved.push(row.month+' '+head);continue;}
+      row[head.toLowerCase()+'_rate']=String(matches[0].rate);applied++;
+      const source=head+' '+matches[0].rate+'%: '+matches[0].reference;
+      if(!row.order_reference)row.order_reference=source;
+      else if(!row.order_reference.includes(source))row.order_reference+='; '+source;
+    }
+  }
+  worksheetChanged();worksheetRender();
+  notify(`${applied} dated rates applied. ${unresolved.length?'No single applicable rate for '+unresolved.join(', ')+'. Check dates/category and source.':'Check entitlement and calculate again.'}`);
+});
