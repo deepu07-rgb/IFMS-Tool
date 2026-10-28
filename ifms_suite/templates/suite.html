@@ -145,6 +145,21 @@
         grid-template-columns: minmax(0, 1fr) 290px;
         gap: 20px;
       }
+      .worksheet-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 34%); gap: 16px; }
+      .worksheet-workspace > * { min-width: 0; }
+      .worksheet-source iframe { height: 650px; }
+      .worksheet-table input { width: 140px; padding: 7px; }
+      .worksheet-table input[type="checkbox"] { width: auto; }
+      .worksheet-table input[data-key$="reference"] { width: 240px; }
+      .worksheet-table th { white-space: nowrap; }
+      .worksheet-table td { vertical-align: top; }
+      .worksheet-table .worksheet-invalid { outline: 2px solid #b74921; background: #fff1e8; }
+      .worksheet-actions { margin: 12px 0; }
+      #worksheetErrors { color: #97390e; }
+      #worksheetErrors button { color: #97390e; background: none; border: 0; text-decoration: underline; cursor: pointer; text-align: left; }
+      #worksheetTabs button[aria-pressed="true"] { background: #123d42; outline: 2px solid #88c8c2; }
+      .worksheet-preview { min-width: 1500px; }
+      .worksheet-preview td, .worksheet-preview th { border: 1px solid #bacdd0; text-align: right; }
       .grid > * {
         min-width: 0;
       }
@@ -166,7 +181,7 @@
           margin: 0;
           padding: 14px;
         }
-        .grid {
+        .worksheet-workspace, .grid {
           display: block;
         }
       }
@@ -348,6 +363,65 @@
         </div>
         <div id="paymentReview"></div>
       </section>
+      <section id="excel_arrear_maker">
+        <h1>Excel Arrear Maker</h1>
+        <p>Enter or import monthly pay, check the sanctioned changes, and prepare the supplied due–drawn form. OCR is optional.</p>
+        <div class="card">
+          <h2>1. Employee and claim dates</h2>
+          <form id="worksheetSetup" onsubmit="return false">
+            <label>Employee code<input name="employee_code" list="worksheetEmployees" required></label>
+            <datalist id="worksheetEmployees"></datalist>
+            <label>Employee name<input name="employee_name" required></label>
+            <label>Claim from<input name="claim_start" type="date" required></label>
+            <label>Through (inclusive)<input name="claim_end" type="date" required></label>
+            <label>Type of arrear<select name="kind"><option value="hra">HRA</option><option value="da">DA revision</option><option value="increment">Basic pay / increment / ACP</option><option value="manual">Explicit monthly due amounts</option></select></label>
+            <label>Rounding<select name="rounding"><option value="rupee">Nearest rupee per head</option><option value="paise">Two decimals per head</option></select></label>
+            <label>Supplied form<select name="template_id"><option value="jodhpur_classic">GPF / SI / CM Corona / Income tax</option><option value="jodhpur_gpf_arrear">GPF to deduct / GPF &amp; SIF already deducted</option></select></label>
+            <label><input name="include_hda" type="checkbox">Recalculate HDA using an approved divisor</label>
+            <div><button type="button" class="action" id="worksheetGenerate">Create monthly rows</button><button type="button" class="action" id="worksheetLoadLedger">Load employee ledger for these dates</button><a class="action" id="worksheetBlankTemplate" href="/suite/api/worksheets/template">Download blank formula Excel</a></div>
+          </form>
+          <p class="muted">Drawn amounts must be full-month actual figures. Dates include both endpoints. Enter a confirmed absent head as 0; leave an unknown value blank.</p>
+        </div>
+        <div class="card">
+          <h2>2. Import or reopen work</h2>
+          <form id="worksheetImportForm"><label>Completed formula workbook<input name="file" type="file" accept=".xlsx" required></label><button class="action">Import and recheck Excel</button></form>
+          <label>Saved draft<select id="worksheetSaved"><option value="">Select a draft</option></select></label><button type="button" class="action" id="worksheetOpen">Open saved draft</button><button type="button" class="action" id="worksheetNew">Start a separate draft</button>
+          <p id="worksheetSaveStatus" role="status">New draft. Changes are saved when you choose Save or Export.</p>
+          <details><summary>Import full salary records into the reusable employee ledger</summary>
+            <p>Use this once per employee/month. Include other allowances and total salary deductions so the printed gross and net can be reconciled. Earlier arrear payments belong in the monthly adjustment table below.</p>
+            <a class="action" href="/suite/api/worksheets/salary-template">Download salary ledger Excel template</a>
+            <form id="worksheetSalaryImport"><label>Salary ledger workbook<input type="file" name="file" accept=".xlsx" required></label><button class="action">Preview salary records</button></form>
+            <div id="worksheetSalaryPreview"></div>
+          </details>
+        </div>
+        <div class="worksheet-workspace">
+          <div class="card">
+            <h2>3. Review the monthly inputs</h2>
+            <p class="muted">Paste cells from Excel into a table, or edit directly. Each table scrolls horizontally. References and the two review checks are required before PDF export.</p>
+            <div id="worksheetTabs" role="group" aria-label="Monthly input groups">
+              <button class="action" type="button" data-sheet="drawn">Drawn pay &amp; dates</button>
+              <button class="action" type="button" data-sheet="entitlement">Sanctioned changes</button>
+              <button class="action" type="button" data-sheet="prior">Earlier payments</button>
+              <button class="action" type="button" data-sheet="deductions">Deductions &amp; checks</button>
+            </div>
+            <div id="worksheetTables"></div>
+            <div id="worksheetErrors" aria-live="polite"></div>
+            <button type="button" class="action" id="worksheetCalculate">Check and calculate</button>
+            <button type="button" class="action" id="worksheetSave">Save draft</button>
+            <button type="button" class="action" id="worksheetExcel">Export formula Excel</button>
+            <button type="button" class="action" id="worksheetPdf">Export supplied-form PDF</button>
+          </div>
+          <div class="card worksheet-source">
+            <h2>Original document</h2>
+            <label>View a local PDF alongside your entries<input id="worksheetLocalPdf" type="file" accept=".pdf"></label>
+            <label>Or select an imported PDF<select id="worksheetSourceSelect"><option value="">Select original</option></select></label>
+            <button type="button" class="action" id="worksheetOcrReview">Open source OCR review</button>
+            <p class="muted">OCR remains editable source transcription. Calculations use the reviewed entries in this maker.</p>
+            <iframe id="worksheetSourceFrame" title="Original salary or sanction document" hidden></iframe>
+          </div>
+        </div>
+        <div class="card"><h2>4. Due–drawn preview</h2><div id="worksheetResult" aria-live="polite">Create monthly rows or import a completed workbook to begin.</div></div>
+      </section>
       <section id="salary_ledger">
         <h1>Salary ledger & arrear maker</h1>
         <p>Confirm monthly drawn pay once, then reuse it for subsequent claims. Regular salary and previous arrear payments stay separate.</p>
@@ -374,7 +448,9 @@
       <section id="arrears">
         <h1>Arrear & Due–Drawn Maker</h1>
         <div class="card">
-          <h2>Prepare from the employee ledger</h2>
+          <h2>Prepare from Excel or entered figures</h2>
+          <button type="button" class="action" onclick="openModule('excel_arrear_maker')">Open Excel Arrear Maker</button>
+          <h3>Or use an existing PDF sanction case</h3>
           <p>Reuse verified monthly salary, open the saved sanction case and select the claim dates. Complete bill downloads use the supplied due–drawn grids.</p>
           <button type="button" class="action" onclick="openModule('salary_ledger')">Open Salary Ledger</button>
         </div>
@@ -806,5 +882,6 @@
     </main>
     <script src="{{ url_for('suite.static',filename='suite.js') }}"></script>
     <script src="{{ url_for('suite.static',filename='ledger.js') }}"></script>
+    <script src="{{ url_for('suite.static',filename='worksheet.js') }}"></script>
   </body>
 </html>

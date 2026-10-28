@@ -15,6 +15,7 @@ const modules = [
   ["inner", "Inner Sheet Analyzer"],
   ["ga55", "GA 55 / OCR"],
   ["salary_ledger", "Salary Ledger"],
+  ["excel_arrear_maker", "Excel Arrear Maker"],
   ["arrears", "Arrear / Due–Drawn"],
   ["rates", "Rates & Allowances"],
   ["schedules", "Schedules & Comparison"],
@@ -77,6 +78,9 @@ function openModule(id) {
     .querySelectorAll("nav button")
     .forEach((b) => b.classList.toggle("active", b.dataset.module === id));
   refresh().catch((e) => notify(e.message));
+  if (id === "excel_arrear_maker" && typeof loadWorksheetWorkspace === "function") {
+    loadWorksheetWorkspace().catch(e => notify(e.message));
+  }
   if (id === 'salary_ledger' && typeof loadLedgerSources === 'function') {
     loadLedgerSources().catch(e => notify(e.message));
   }
