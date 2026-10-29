@@ -428,6 +428,7 @@
         </div>
         <div class="card"><h2>4. Due–drawn preview</h2><div id="worksheetResult" aria-live="polite">Create monthly rows or import a completed workbook to begin.</div></div>
       </section>
+      {% include 'bill_register.html' %}
       <section id="salary_ledger">
         <h1>Salary ledger & arrear maker</h1>
         <p>Confirm monthly drawn pay once, then reuse it for subsequent claims. Regular salary and previous arrear payments stay separate.</p>
@@ -898,5 +899,6 @@
     <script src="{{ url_for('suite.static',filename='ledger.js') }}"></script>
     <script src="{{ url_for('suite.static',filename='worksheet.js') }}"></script>
     <script src="{{ url_for('suite.static',filename='reference_desk.js') }}"></script>
+    <script src="{{ url_for('suite.static',filename='bill_register.js') }}"></script>
   </body>
 </html>

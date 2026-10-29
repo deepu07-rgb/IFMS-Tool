@@ -695,3 +695,7 @@ from .document_library import register_document_library
 
 register_slabs(suite)
 register_document_library(suite)
+
+from .bill_register_routes import register_bill_register
+
+register_bill_register(suite)

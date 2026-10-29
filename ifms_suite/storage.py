@@ -51,3 +51,7 @@ def initialize():
 
         initialize_slabs(db)
         initialize_library(db)
+
+        from .bill_register_routes import initialize_bill_register
+
+        initialize_bill_register(db)

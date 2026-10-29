@@ -1,0 +1,25 @@
+<section id="bill_register">
+ <h1>Bill Register</h1>
+ <p>Extract source columns without changing figures. Review uncertain entries, customize columns, then download Excel or landscape PDF.</p>
+ <div class="card">
+  <h2>Import a batch</h2>
+  <form id="billRegisterImport"><label>PDF files (1–20; up to 10 MiB each)<input name="files" type="file" accept=".pdf" multiple required></label><button class="action">Parse selected PDFs</button></form>
+  <p id="billRegisterProgress" role="status"></p>
+  <form id="billRegisterOuter"><label>Previously imported outer sheets<select name="import_ids" multiple size="5" aria-label="Outer sheets for bill register"></select></label><button class="action">Convert selected outer sheets</button></form>
+  <label>Saved register<select id="billRegisterSaved"></select></label><button type="button" class="action" id="billRegisterOpen">Open register</button>
+ </div>
+ <div class="card">
+  <h2>Output and review</h2>
+  <div id="billRegisterOfficialStatus" role="status"></div>
+  <label>Output format<select id="billRegisterMode"><option value="raw">Source / customized columns — no amount adjustment</option><option value="official">Rajasthan GF&amp;AR prescribed bill register</option></select></label>
+  <label>Paper size<select id="billRegisterPaper"><option value="A4">A4 landscape</option><option value="FS">FS / foolscap 8.5 × 13 inches landscape</option></select></label>
+  <button type="button" class="action" id="billRegisterExcel">Download saved Excel</button><button type="button" class="action" id="billRegisterPdf">Download saved PDF</button>
+  <p id="billRegisterSaveStatus" aria-live="polite">Choose a source to begin.</p>
+  <div id="billRegisterIssues"></div>
+  <label>Find rows (screen filter only)<input id="billRegisterSearch" type="search" placeholder="Bill number, month, group, token…"></label>
+  <label>New column name<input id="billRegisterNewColumn"></label><button type="button" class="action" id="billRegisterAddColumn">Add column</button>
+  <p class="muted">Use ↑ / ↓ to reorder columns or Remove to exclude a column. Original extraction and original PDFs remain preserved. Exports contain all saved rows, including rows hidden by the screen filter.</p>
+  <div class="grid"><div><div id="billRegisterTable" class="scroll"></div><button type="button" class="action" id="billRegisterPrevious">Previous rows</button><span id="billRegisterPage"></span><button type="button" class="action" id="billRegisterNext">Next rows</button></div><div><label>View original source<select id="billRegisterSource"></select></label><iframe id="billRegisterSourceFrame" title="Original bill register PDF" style="height:520px" hidden></iframe></div></div>
+  <label>Review / correction reference<input id="billRegisterReference" placeholder="Original records checked; explain changes"></label><label><input id="billRegisterReviewed" type="checkbox">I checked the saved entries and column changes against the original sources</label><button type="button" class="action" id="billRegisterSave">Save reviewed edits</button>
+ </div>
+</section>

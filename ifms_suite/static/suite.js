@@ -12,6 +12,7 @@ const modules = [
   ["dashboard", "Dashboard"],
   ["employees", "Employee & Groups"],
   ["outer", "Outer Sheet Analyzer"],
+  ["bill_register", "Bill Register"],
   ["inner", "Inner Sheet Analyzer"],
   ["ga55", "GA 55 / OCR"],
   ["salary_ledger", "Salary Ledger"],
@@ -80,6 +81,7 @@ function openModule(id) {
     .querySelectorAll("nav button")
     .forEach((b) => b.classList.toggle("active", b.dataset.module === id));
   refresh().catch((e) => notify(e.message));
+  if (id === "bill_register" && typeof loadBillRegister === "function") loadBillRegister().catch(e=>notify(e.message));
   if (id === "important_documents" && typeof loadDocumentLibrary === "function") loadDocumentLibrary().catch(e=>notify(e.message));
   if (id === "salary_slabs" && typeof loadSlabLibrary === "function") loadSlabLibrary().catch(e=>notify(e.message));
   if (id === "excel_arrear_maker" && typeof loadWorksheetWorkspace === "function") {

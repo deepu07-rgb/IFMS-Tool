@@ -241,3 +241,17 @@ Actual browser via fresh private app workspace:
 Reproducible synthetic browser smoke: `python scripts/verify_reference_desk_browser.py --url http://127.0.0.1:<test-port>` (development Playwright required, no production dependency). The earlier `scripts/verify_worksheet_browser.py` continues to cover saved-draft HTTP races. Private actual-source evidence and sample bills are outside Git. Public blank templatev2 and blank legacyv1 fixture contain no employee data.
 
 No package/release workflow dispatched; final bundling remains paused. Runtime dependency files are unchanged; Windows installed-size certification awaits final packaging acceptance.
+
+
+## Bill Register — 29 October 2026
+
+Final full repository suite: **720 passed, 14 skipped**, 87.10 seconds; log `/tmp/ifms-register-final-reviewed-tests.log`. This includes 9 parser, 29 route and 17 register-export tests. No production dependency changes or final release build.
+
+- Supplied digital Bill Details Summary: all 26 rows and all 390 literal fields checked against independent source transcription. Gross 35,162,675; net 27,442,143; income tax 398,500. The row 14 ECS continuation is retained with evidence from both pages and a review flag.
+- Controlled 200-dpi raster scan of the same PDF, through the actual local OCR API: 389/390 literal fields exact. All gross/net/tax and bill/TV/token/ECS identifiers match. One date reads `46/09/2026` instead of `16/09/2026`; the app preserves the recognized value and flags the invalid date. This is not a general handwriting or unseen-layout accuracy claim.
+- Twenty distinct PDF containers repeating this source retained 520 rows and duplicate-bill warnings. Identical byte-for-byte sources are skipped with explicit notices. The stress test checks batch controls, not 20 independent source layouts.
+- Full-app Chromium: source preview, column addition/removal/reordering, review/save/reopen, A4/FS Excel and PDF downloads, and the official-format verification block; no JavaScript errors. Downloads include all saved rows despite screen search/pagination.
+- Existing Outer conversion and direct recognized Outer upload reproduce printed gross 48,661 and net 43,121. A reference number remains labeled as a reference. Independent review caught inherited whole-rupee rounding in the existing-Outer bridge; a failing-then-passing regression now preserves printed 1,000.49/900.50, leaving unavailable or ambiguous printed amounts blank with warnings.
+- Originals, initial extraction, source geometry, and revision audit retained. All personal reports, PDFs, OCR results and screenshots stay outside Git under `/workspace/review/bill-register-2026-10-29`.
+
+**Incomplete:** Authentic Rajasthan GF&AR output remains unimplemented. Thirteen official/search requests returned network proxy HTTP 403; the app explicitly blocks that mode rather than inventing government columns or a form identifier. A verified blank prescribed form or accessible authoritative source is needed to implement and validate its mapping. Source/custom Excel and PDF exports work independently of this limitation.
